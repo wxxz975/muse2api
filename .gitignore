@@ -32,6 +32,10 @@ wheels/
 # Runtime & User Data
 data/accounts.json
 data/tasks.json
+data/maintenance.json
+data/accounts.pre-dedup-*.json
+data/diagnostics*
+.work/
 data/.installed_sha
 data/debug-*.json
 data/media/*

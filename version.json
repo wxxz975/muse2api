@@ -1,19 +1,23 @@
 {
-  "version": "1.6.10",
-  "updated_at": "2026-11-11",
+  "version": "1.6.11",
+  "updated_at": "2026-11-13",
   "repo": "https://github.com/wxxz975/muse2api",
   "highlights": [
-    "修复发送按钮误匹配侧栏历史、Send feedback 或 Resend 的问题，避免参考图和长提示词留在输入框未提交。",
-    "首次发送、重试和发送状态检查统一定位当前输入区域，识别中英文标签、disabled、aria-disabled 和 inert 状态。",
-    "继续校验实际发送及媒体成品；点击发送不等于任务完成，不把上传的参考素材当生成结果。",
-    "核验仓库、管理面板及中英文界面的社区推广内容清理状态；感谢 @WXJJ0520 的 PR #48。",
-    "更新服务后请强制刷新管理页。插件仍为 1.0.2、油猴脚本仍为 1.1.2；当前版本无需重装，旧扩展仍需在各浏览器个人资料中手动升级。"
+    "自行维护的二次开发版本，保留 czg86389-hub/muse2api 原作者致谢与 MIT 许可证。",
+    "新增管理页批量网页登录：邮箱/手机号加自动取码链接或手动验证码；隔离账号会话，完成上游认证后保存 Cookie，不是账号密码直登，也不绕过人工验证。",
+    "账号重复会话自动归并；已认证邮箱或稳定用户身份支持跨会话去重，代理/身份冲突拒绝合并，旧账号 ID 保留别名并备份迁移数据。",
+    "维护设置可配置保活和额度查询周期，关闭管理页后后台仍会运行；复用原 Settings 页面查询真实额度与重置文案，不虚构有效期和最后业务使用时间。",
+    "账号额度改为卡片展示：套餐、已用百分比与进度条、额度重置时间、Cookie 有效期及最近刷新；未知值明确显示未知。",
+    "新增持久脱敏诊断日志：按任务/账号筛选上传、发送、等待成品、取回与重试阶段，保留错误类型和安全异常栈；写入故障不影响已成功的视频。",
+    "更新后请强制刷新管理页。扩展仍为 1.0.2、油猴脚本 1.1.2，无需重装；旧扩展仍需手动在每个浏览器个人资料中升级。"
   ],
   "highlights_en": [
-    "Fix send-button matching against sidebar history, Send feedback and Resend, which could leave prompts and reference attachments unsubmitted.",
-    "Initial sends, retries and readiness checks share one composer-scoped locator with localized labels and disabled, aria-disabled and inert handling.",
-    "Keep actual submission and generated-media verification; clicking Send is not task completion, and uploaded references are not generated results.",
-    "Verify repository and bilingual dashboard community-promotion cleanup. Thanks to @WXJJ0520 for PR #48.",
-    "Hard-refresh after updating. Extension remains 1.0.2 and userscript 1.1.2; current versions need no reinstall. Older extensions require a manual update in every browser profile."
+    "Self-maintained fork of czg86389-hub/muse2api; original authorship and MIT license preserved.",
+    "Admin-managed batch login uses email/phone plus automatic mailbox-code URL or manual OTP, isolated browser contexts and verified upstream sessions, not password login or CAPTCHA bypass.",
+    "Deduplicate identical sessions and verified account identities with conflict checks, legacy ID aliases and private migration backups; unknown identities are not guessed.",
+    "Configurable background session and quota maintenance reuses the existing Settings-page automation. Real expiry and last business use remain distinct from maintenance timestamps.",
+    "Quota account cards show the plan, validated usage percentage/progress, upstream reset information, cookie expiry and last refresh. Unknown data stays unknown.",
+    "Persistent redacted task diagnostics cover upload, send, wait, extraction and retry phases, error types and safe stack frames without exposing credentials.",
+    "Hard-refresh the dashboard after updating. Extension remains 1.0.2 and userscript 1.1.2; older extensions still require a manual upgrade in every browser profile."
   ]
 }

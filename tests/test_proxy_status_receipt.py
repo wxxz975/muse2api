@@ -88,7 +88,7 @@ const cases=[
  [{checked_at:1,proxy_reachable:null}, '代理未确认']
 ];
 for(const [status,label] of cases){
- const ctx={account:{proxy:{server:'socks5://fixture:1080'},proxy_status:status},t:x=>x,esc:x=>String(x),fmtTime:x=>'checked'};
+ const ctx={account:{proxy:{server:'socks5://fixture:1080'},proxy_status:status},t:x=>x,esc:x=>String(x),fmtTime:x=>'checked',accountTime:x=>'checked'};
  const value=vm.runInNewContext(renderer+';proxyStatus(account)',ctx);
  if(!value.includes(label))throw Error('Wrong label: '+label);
 }

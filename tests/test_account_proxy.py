@@ -138,7 +138,7 @@ class AccountProxyTests(unittest.TestCase):
                 normalize_server(bad)
         self.assertEqual(normalize_server("http://[::1]:8080/"), "http://[::1]:8080")
         status, created = asyncio.run(request("POST", "/admin/accounts", {
-            "cookies": {"hatch_sess": "fake-cookie"},
+            "cookies": {"hatch_sess": "validation-only-cookie"},
             "proxy": {"server": "http://proxy.example:80", "username": "user", "password": "secret-marker"}}))
         self.assertEqual(status, 200)
         aid = created["added"][0]["id"]

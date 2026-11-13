@@ -57,6 +57,11 @@ from engine import (ESSENTIAL_COOKIES, MAX_REFERENCE_IMAGE_BYTES,
 from engine import MuseProxyError
 from store import Store, account_expiry, min_expiry
 from proxy import normalize_server, request_proxy_context, split_proxy_url
+from maintenance import MaintenanceSettings, MaintenanceSettingsStore, operation_due
+from diagnostics import Journal, redact, safe_message
+from account_identity import AccountIdentityConflict, identity_from_session, identity_keys
+from autologin import (AutoLoginService, LoginCapacityError, LoginConflictError,
+                       LoginNotFoundError)
 
 import sys
 log = logging.getLogger("muse2api")
@@ -67,7 +72,7 @@ if not log.handlers:
     log.addHandler(_h)
 
 CFG.ensure_dirs()
-app = FastAPI(title="muse2api", version="1.6.10")
+app = FastAPI(title="muse2api", version="1.6.11")
 
 # Cookie 助手脚本从 muse.ai 页面发起导入请求，需要放行该来源；
 # 浏览器扩展从 chrome-extension:// 发起，也一并放行。
@@ -80,13 +85,19 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 app.add_middleware(CORSMiddleware,
                    allow_origins=["*"],
-                   allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+                   allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                    allow_headers=["*"],
                    expose_headers=["*"],
                    max_age=600)
 
+journal = Journal(os.path.join(CFG.data_dir, "diagnostics.jsonl"))
+maintenance_settings = MaintenanceSettingsStore(
+    os.path.join(CFG.data_dir, "maintenance.json"),
+    MaintenanceSettings(keepalive_interval_minutes=CFG.keepalive_interval_min,
+                        quota_interval_minutes=CFG.quota_refresh_min,
+                        include_disabled=CFG.keepalive_disabled_accounts))
 store = Store(CFG)
-engine = MuseEngine(CFG)
+engine = MuseEngine(CFG, journal=journal)
 engine.proxy_resolver = lambda aid: (store.get_account(aid) or {}).get("proxy")
 
 
@@ -152,8 +163,9 @@ class AccountPoolManager:
                     acc = self.store.get_account(account_id)
                     if not acc or not acc.get("enabled", True):
                         raise MuseAuthError(f"指定账号 {account_id} 不存在或已禁用")
-                    if account_id not in self.busy_accounts:
-                        self.busy_accounts.add(account_id)
+                    canonical_id = acc["id"]
+                    if canonical_id not in self.busy_accounts:
+                        self.busy_accounts.add(canonical_id)
                         return acc
                 else:
                     pref = preferred_id if preferred_id not in self.busy_accounts else None
@@ -179,6 +191,9 @@ class AccountPoolManager:
             return
         with self.cond:
             self.busy_accounts.discard(account_id)
+            account = self.store.get_account(account_id)
+            if account:
+                self.busy_accounts.discard(account["id"])
             self.cond.notify_all()
 
 
@@ -214,6 +229,8 @@ def _account_operation(aid: str):
     """Maintenance and settings share the same account lease as generation."""
     with ACCOUNT_POOL.cond:
         account = store.get_account(aid)
+        if account:
+            aid = account["id"]
         if not account:
             raise HTTPException(404, "账号不存在")
         if aid in ACCOUNT_POOL.busy_accounts:
@@ -353,7 +370,7 @@ def _renew_and_persist(acc_id: str, wake_vm: bool = True, force: bool = False) -
         engine._last_http_renew[acc_id] = now
         if res.get("cookies"):
             store.update_account(acc_id, cookies=res["cookies"],
-                                 cookies_exp=res.get("cookies_exp"),
+                                 cookies_exp=res.get("cookies_exp"), verified_session=True,
                                  ok=True if res.get("ok") else acc.get("ok"),
                                  synced_at=int(now))
             store.touch_keepalive(acc_id, True, f"会话正常 (VM: {res.get('vm_state') or 'RUNNING'})")
@@ -1087,7 +1104,7 @@ def _sync_cookies(acc_id: str) -> dict:
                      if _pos(v.get("expires"))})
         changed = sum(1 for k, v in new_vals.items() if cur.get(k) != v)
         store.update_account(acc_id, cookies={**cur, **new_vals},
-                             cookies_exp=exps, synced_at=int(time.time()))
+                             cookies_exp=exps, synced_at=int(time.time()), verified_session=True)
         updated = store.get_account(acc_id) or {}
         return {"synced": len(new_vals), "changed": changed,
                 "expires_at": updated.get("expires_at")}
@@ -1173,10 +1190,13 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                     reference_image = refs[0]
                 elif len(refs) > 1:
                     engine_kwargs["reference_images"] = refs
-                res = engine.generate(cur_acc["cookies"], prompt, expect=kind,
-                                      timeout=remaining, expires=cur_acc.get("cookies_exp"),
-                                      account_id=cur_acc["id"], on_progress=on_progress,
-                                      reference_image=reference_image, **engine_kwargs)
+                with journal.context(account_id=cur_acc["id"], attempt=attempt + 1):
+                    journal.emit("generation.attempt", stage="prepare", kind=kind,
+                                 remaining_seconds=remaining, reference_count=len(refs))
+                    res = engine.generate(cur_acc["cookies"], prompt, expect=kind,
+                                          timeout=remaining, expires=cur_acc.get("cookies_exp"),
+                                          account_id=cur_acc["id"], on_progress=on_progress,
+                                          reference_image=reference_image, **engine_kwargs)
                 store.mark(cur_acc["id"], True, "")
                 _sync_cookies(cur_acc["id"])
                 return res, cur_acc["id"]
@@ -1273,6 +1293,31 @@ def _prepare_reference_images(images: list[str]) -> list[str]:
     return prepared
 
 
+def _task_runner(tid: str, worker):
+    """Attach the durable task id to every engine phase in this worker thread."""
+    with journal.context(task_id=tid):
+        journal.emit("task.started", stage="queue")
+        try:
+            worker()
+        except Exception as exc:
+            _record_task_failure(tid, exc)
+        finally:
+            task = store.get_task(tid) or {}
+            journal.emit("task.finished", stage="terminal", status=task.get("status"),
+                         duration_seconds=task.get("elapsed"))
+
+
+def _record_task_failure(tid: str, exc: Exception, elapsed: float | None = None):
+    reason = safe_message(str(exc))
+    journal.error("task.failed", exc, task_id=tid, stage="generation", reason=reason)
+    details = {"error_type": type(exc).__name__, "reason": reason,
+               "logs_url": f"/admin/tasks/{tid}/logs"}
+    changes = {"status": "failed", "error": reason, "error_detail": details}
+    if elapsed is not None:
+        changes["elapsed"] = round(elapsed, 1)
+    store.update_task(tid, **changes)
+
+
 def _queue_image(req: ImageRequest, prompt: str, reference_images: list[str],
                  idempotency_key: str | None = None):
     """Opt-in polling avoids reverse-proxy timeouts; no generation is repeated by polling."""
@@ -1322,10 +1367,10 @@ def _queue_image(req: ImageRequest, prompt: str, reference_images: list[str],
                               result={**{k: res[k] for k in ("filename", "size", "kind")},
                                       "url": media_url(res["filename"])})
         except Exception as exc:  # noqa: BLE001
-            store.update_task(tid, status="failed", error=str(exc),
-                              elapsed=round(time.time() - timing["t0"], 1))
+            _record_task_failure(tid, exc, time.time() - timing["t0"])
 
-    threading.Thread(target=worker, daemon=True).start()
+    journal.emit("task.queued", task_id=tid, stage="queue", kind="image")
+    threading.Thread(target=_task_runner, args=(tid, worker), daemon=True).start()
     return JSONResponse(status_code=202, content={
         "id": tid, "task_id": tid, "object": "image.task", "status": "queued",
         "progress": 0, "created_at": task["created_at"]})
@@ -1531,10 +1576,11 @@ async def create_video(req: VideoRequest,
                                       "filename": res["filename"],
                                       "bytes": res["size"], "kind": res["kind"]})
         except Exception as exc:  # noqa: BLE001
-            store.update_task(task["id"], status="failed",
-                              elapsed=round(time.time() - timing["t0"], 1), error=str(exc))
+            _record_task_failure(task["id"], exc, time.time() - timing["t0"])
 
-    threading.Thread(target=worker, daemon=True).start()
+    journal.emit("task.queued", task_id=task["id"], stage="queue", kind="video",
+                 reference_count=len(ref_images))
+    threading.Thread(target=_task_runner, args=(task["id"], worker), daemon=True).start()
     return {"id": task["id"], "task_id": task["id"], "object": "video.task", "status": "queued",
             "progress": 10, "created_at": task["created_at"]}
 
@@ -1912,42 +1958,41 @@ def list_accounts(_=Depends(auth)):
 
 @app.post("/admin/accounts")
 def add_account(req: AccountRequest, _=Depends(auth)):
-    proxy = req.proxy.configuration() if req.proxy else None
-    added: list[dict] = []
-    seen: list[dict] = []          # 本次导入的所有 cookie，用来检查核心项是否齐全
-
-    if req.batch:
-        for label, cookies in parse_batch(req.batch):
-            acc = store.add_account(cookies, label)
-            seen.append(cookies)
-            added.append({"id": acc["id"], "label": acc["label"],
-                          "cookie_count": len(cookies),
-                          "expires_at": acc.get("expires_at")})
-
+    supplied_proxy = "proxy" in req.model_fields_set
+    route = req.proxy.configuration() if req.proxy else None
+    sources = list(parse_batch(req.batch or ""))
     cookies = dict(req.cookies)
     if req.cookie_header:
         cookies.update(parse_cookie_text(req.cookie_header))
     if cookies:
-        acc = store.add_account(cookies, req.label, cookies_exp=req.expires)
-        seen.append(cookies)
-        added.append({"id": acc["id"], "label": acc["label"],
-                      "cookie_count": len(cookies),
-                      "expires_at": acc.get("expires_at")})
-
-    if not added:
+        sources.append((req.label, cookies))
+    if not sources:
         raise HTTPException(400, "未解析到任何 cookie，请检查格式")
-
-    if proxy:
-        for account in added:
-            store.update_account(account["id"], proxy=proxy)
-
-    # 只要有一个账号把核心 cookie 凑齐就算通过（批量时按整体判断）
-    missing = [n for n in ESSENTIAL_COOKIES
-               if not any(n in c for c in seen)]
-    return {"added": added, "count": len(added),
+    added, unique_ids = [], set()
+    for label, values in sources:
+        try:
+            # Exact same session dedupes locally. Verified OTP identity dedupes across sessions.
+            # Caller-supplied labels are never trusted as account identity.
+            with ACCOUNT_POOL.cond:
+                if any(a.get("cookies", {}).get("hatch_sess") == values.get("hatch_sess")
+                       and a["id"] in ACCOUNT_POOL.busy_accounts for a in store.accounts
+                       if values.get("hatch_sess")):
+                    raise HTTPException(409, "该账号正在执行任务，请空闲后重新导入")
+                kwargs = {"proxy": route} if supplied_proxy else {}
+                account = store.add_account(values, label, cookies_exp=req.expires or None, **kwargs)
+            if account["id"] not in unique_ids:
+                unique_ids.add(account["id"])
+                added.append({"id": account["id"], "label": account["label"],
+                              "cookie_count": len(account["cookies"]),
+                              "expires_at": account.get("expires_at")})
+                journal.emit("account.imported", account_id=account["id"], stage="import")
+        except AccountIdentityConflict as exc:
+            raise HTTPException(409, safe_message(str(exc))) from None
+    missing = [name for name in ESSENTIAL_COOKIES if not any(values.get(name) for _, values in sources)]
+    _wake_maintenance()
+    return {"added": added, "count": len(added), "input_count": len(sources),
             "essential_missing": missing,
-            "warning": (f"缺少核心 cookie：{', '.join(missing)}，该账号可能无法生成"
-                        if missing else "")}
+            "warning": f"缺少核心 cookie：{', '.join(missing)}，该账号可能无法生成" if missing else ""}
 
 
 # One short-lived receipt per account; credentials are represented only by a hash.
@@ -2149,18 +2194,8 @@ async def query_quota(aid: str, _=Depends(auth)):
     if not acc.get("cookies"):
         raise HTTPException(400, "该账号没有 cookie")
 
-    def _probe():
-        with GEN_LOCK, _account_operation(aid) as acc:
-            engine.start()
-            q = engine.quota(acc["cookies"], acc.get("cookies_exp"), account_id=aid)
-            if not q.get("found"):
-                raise MuseGenerationError("额度面板未读到有效数据；旧缓存未覆盖")
-            q["checked_at"] = int(time.time())
-            store.update_account(aid, quota=q)
-            return q
-
     try:
-        return await asyncio.to_thread(_probe)
+        return await asyncio.to_thread(_query_quota_sync, aid)
     except HTTPException:
         raise
     except MuseAuthError as exc:
@@ -2176,7 +2211,7 @@ async def query_quota(aid: str, _=Depends(auth)):
 async def query_any_quota(_=Depends(auth)):
     """用当前最久未用的可用账号查一次额度（同池账号共享同一 muse.ai 计划的
     通常只有一人使用时够用；多账号时建议按账号查）。"""
-    acc = store.pick_account(rotate=True)
+    acc = store.pick_account(rotate=True, record_use=False)
     if not acc:
         raise HTTPException(400, "没有可用账号")
     return await query_quota(acc["id"], _)
@@ -2381,115 +2416,196 @@ def admin_page():
 
 
 
-# ------------------------- 账号自动保活与静默续期 -------------------------
+# ------------------------- Account maintenance (manual + scheduled) -------------------------
 KEEPALIVE_LOCK = asyncio.Lock()
-KEEPALIVE_STATE = {
-    "running": False,
-    "last_run": None,
-    "last_result": None,
-    "next_run": None,
-}
+KEEPALIVE_STATE = {"running": False, "last_run": None, "last_result": None,
+                   "next_run": None, "last_keepalive_at": None, "last_quota_at": None}
+_MAINTENANCE_WAKEUP = asyncio.Event()
+_MAINTENANCE_TASK = None
+_MAINTENANCE_MANUAL_TASK = None
+
+
+def _wake_maintenance():
+    # Called from sync routes/login worker threads as well as the event loop.
+    loop = getattr(_MAINTENANCE_TASK, "get_loop", lambda: None)()
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(_MAINTENANCE_WAKEUP.set)
+
+
+def _persist_session(aid: str, result: dict, note: str, *, keepalive: bool = True) -> dict:
+    """Only confirmed assigned sessions refresh health and real cookie expiry."""
+    if not result.get("ok"):
+        raise MuseGenerationError("会话尚未确认，保留原状态与有效期")
+    now = int(time.time())
+    fields = {"cookies": result["cookies"], "cookies_exp": result["cookies_exp"],
+              "verified_session": True, "synced_at": now, "session_checked_at": now,
+              "vm_state": result.get("vm_state"), "vm_checked_at": now}
+    if keepalive:
+        fields.update(wake_ok=bool(result.get("wake_ok")), keepalive_checked_at=now, keepalive_error="")
+    acc = store.update_account(aid, **fields)
+    if keepalive:
+        store.touch_keepalive(aid, True, note)
+    else:
+        store.mark(aid, True, note)
+    if result.get("identity"):
+        with ACCOUNT_POOL.cond:
+            if not ACCOUNT_POOL.busy_accounts - {aid, (acc or {}).get("id")}:
+                acc = store.bind_identity(aid, result["identity"])
+                if aid in ACCOUNT_POOL.busy_accounts:
+                    ACCOUNT_POOL.busy_accounts.add(acc["id"])
+    return acc or store.get_account(aid) or {}
+
+
+def _quota_in_lease(aid: str, acc: dict) -> dict:
+    """The manual button and scheduler share the existing Settings-menu JS."""
+    store.update_account(aid, quota_checked_at=int(time.time()))
+    journal.emit("quota.started", account_id=aid, stage="quota")
+    try:
+        engine.start()
+        quota = engine.quota(acc["cookies"], acc.get("cookies_exp"), account_id=aid)
+        if not quota.get("found"):
+            raise MuseGenerationError("额度面板未读到有效数据；旧缓存未覆盖")
+        quota["checked_at"] = int(time.time())
+        store.update_account(aid, quota=quota, quota_error="")
+        live = getattr(engine, "last_quota_cookies", None) or {}
+        if live:
+            current = store.get_account(aid) or acc
+            values = {k: v["value"] for k, v in live.items() if v.get("value")}
+            exps = dict(current.get("cookies_exp") or {})
+            exps.update({k: int(v["expires"]) for k, v in live.items() if _pos(v.get("expires"))})
+            store.update_account(aid, cookies={**current["cookies"], **values},
+                                 cookies_exp=exps, synced_at=int(time.time()), verified_session=True)
+        journal.emit("quota.completed", account_id=aid, stage="quota",
+                     weekly_used_pct=quota.get("weekly_used_pct"))
+        return quota
+    except Exception as exc:
+        reason = safe_message(str(exc))
+        store.update_account(aid, quota_error=reason, quota_checked_at=int(time.time()))
+        journal.error("quota.failed", exc, account_id=aid, stage="quota", reason=reason)
+        raise
+
+
+def _query_quota_sync(aid: str, background: bool = False) -> dict:
+    # Browser slot before account lease, matching generation. Background work never queues ahead of it.
+    acquired = GEN_LOCK.acquire(blocking=False) if background else GEN_LOCK.acquire(timeout=30)
+    if not acquired:
+        raise HTTPException(409, "浏览器繁忙，额度查询将在下轮重试")
+    try:
+        with _account_operation(aid) as acc, journal.context(account_id=aid):
+            if not acc.get("cookies"):
+                raise HTTPException(400, "该账号没有 cookie")
+            result = engine.renew_session_http(
+                acc["cookies"], acc.get("cookies_exp"), wake_vm=False,
+                **({"proxy": _account_proxy(acc)} if _account_proxy(acc) else {}))
+            acc = _persist_session(aid, result, "会话有效 · 额度刷新", keepalive=False)
+            return _quota_in_lease(aid, acc)
+    except MuseAuthError as exc:
+        store.touch_keepalive(aid, False, "额度查询认证失败: " + safe_message(str(exc)))
+        journal.error("quota.auth_failed", exc, account_id=aid, stage="session",
+                      reason=safe_message(str(exc)))
+        raise
+    finally:
+        GEN_LOCK.release()
 
 
 def _probe_account_sync(aid: str, check_quota: bool = False) -> dict:
-    """Verify the upstream session through this account's saved route."""
+    """Refresh health/real expiry, without counting maintenance as business use."""
     try:
-        with _account_operation(aid) as acc:
+        with _account_operation(aid) as acc, journal.context(account_id=aid):
             if not acc.get("cookies"):
-                return {"ok": False, "id": aid, "label": acc.get("label", aid), "error": "账号无有效 cookie"}
-            res = engine.renew_session_http(acc["cookies"], acc.get("cookies_exp"), wake_vm=True,
-                                            **({"proxy": _account_proxy(acc)} if _account_proxy(acc) else {}))
-            store.update_account(
-                aid,
-                cookies=res["cookies"],
-                cookies_exp=res["cookies_exp"],
-                ok=True if res.get("ok") else False,
-                synced_at=int(time.time()),
-            )
-            vm_state = res.get("vm_state") or "RUNNING"
-            store.touch_keepalive(aid, True, f"会话有效 · 自动保活 (VM: {vm_state})")
-            quota = acc.get("quota")
+                return {"ok": False, "id": aid, "error": "账号无有效 cookie"}
+            store.update_account(aid, keepalive_checked_at=int(time.time()))
+            journal.emit("keepalive.started", stage="session")
+            res = engine.renew_session_http(
+                acc["cookies"], acc.get("cookies_exp"), wake_vm=True,
+                **({"proxy": _account_proxy(acc)} if _account_proxy(acc) else {}))
+            vm_state = res.get("vm_state")
+            updated = _persist_session(aid, res, f"会话有效 · 自动保活 (VM: {vm_state or 'unknown'})")
+            quota, quota_error = updated.get("quota"), None
             if check_quota and GEN_LOCK.acquire(blocking=False):
                 try:
-                    engine.start()
-                    quota = engine.quota(res["cookies"], res["cookies_exp"],
-                                         account_id=aid)
-                    if not quota.get("found"):
-                        raise MuseGenerationError("额度面板未读到有效数据；旧缓存未覆盖")
-                    quota["checked_at"] = int(time.time())
-                    store.update_account(aid, quota=quota)
-                except Exception as qe:  # noqa: BLE001
-                    log.warning("读取账号 %s 额度失败: %s", aid, qe)
+                    quota = _quota_in_lease(aid, updated)
+                except Exception as exc:
+                    quota_error = safe_message(str(exc))
                 finally:
                     GEN_LOCK.release()
-            updated = store.get_account(aid) or {}
-            return {
-                "ok": True,
-                "id": aid,
-                "label": acc.get("label", aid),
-                "vm_id": res.get("vm_id"),
-                "vm_state": vm_state,
-                "wake_ok": res.get("wake_ok"),
-                "expires_at": updated.get("expires_at"),
-                "quota": quota,
-            }
+            journal.emit("keepalive.completed", stage="session", vm_state=vm_state,
+                         wake_ok=res.get("wake_ok"), expires_at=updated.get("expires_at"))
+            return {"ok": True, "id": updated.get("id", aid), "label": updated.get("label", aid),
+                    "vm_id": res.get("vm_id"), "vm_state": vm_state, "wake_ok": res.get("wake_ok"),
+                    "expires_at": updated.get("expires_at"), "quota": quota, "quota_error": quota_error}
     except HTTPException as exc:
-        return {"ok": False, "id": aid, "busy": exc.status_code == 409, "error": str(exc.detail)}
+        return {"ok": False, "id": aid, "busy": exc.status_code == 409,
+                "error": safe_message(str(exc.detail))}
     except MuseAuthError as exc:
-        store.touch_keepalive(aid, False, f"保活认证失败: {str(exc)[:200]}")
-        return {"ok": False, "id": aid, "error": str(exc)}
+        reason = safe_message(str(exc))
+        store.touch_keepalive(aid, False, "保活认证失败: " + reason)
+        store.update_account(aid, keepalive_checked_at=int(time.time()), keepalive_error=reason)
+        journal.error("keepalive.auth_failed", exc, account_id=aid, stage="session", reason=reason)
+        return {"ok": False, "id": aid, "error": reason}
     except Exception as exc:
-        store.touch_keepalive(aid, None, f"保活未确认（保留账号状态）: {str(exc)[:200]}")
-        return {"ok": False, "id": aid, "error": str(exc)}
+        reason = safe_message(str(exc))
+        store.touch_keepalive(aid, None, "保活未确认（保留账号状态）: " + reason)
+        store.update_account(aid, keepalive_checked_at=int(time.time()), keepalive_error=reason)
+        journal.error("keepalive.failed", exc, account_id=aid, stage="session", reason=reason)
+        return {"ok": False, "id": aid, "error": reason}
 
 
-async def run_keepalive_all(force: bool = False) -> dict:
-    """执行账号保活：force=True 时强制刷新所有启用账号，否则刷新临期/未检账号并保持 VM 热备。"""
+async def _run_maintenance(force: bool, with_quota: bool) -> dict:
     async with KEEPALIVE_LOCK:
+        settings = maintenance_settings.get()
         now = int(time.time())
-        KEEPALIVE_STATE["running"] = True
-        KEEPALIVE_STATE["last_run"] = now
-        results = []
-        skipped = []
-
+        KEEPALIVE_STATE.update(running=True, last_run=now)
+        results, skipped = [], []
         try:
-            include_disabled = getattr(CFG, "keepalive_disabled_accounts", False)
-            accounts = [a for a in store.list_accounts() if include_disabled or a.get("enabled", True)]
-            for a in accounts:
-                aid = a["id"]
-                label = a.get("label", aid)
-                exp_at = a.get("expires_at")
-                last_ka = a.get("last_keepalive") or 0
-
-                needs_run = (
-                    force
-                    or not last_ka
-                    or ((now - last_ka) > 6 * 3600 and
-                        (not exp_at or exp_at - now < 36 * 3600 or
-                         a.get("ok") is not True))
-                )
-                if not needs_run:
-                    skipped.append({"id": aid, "label": label, "reason": "会话充足且近期已保活"})
+            for account in store.list_accounts():
+                include_disabled = settings.include_disabled or getattr(CFG, "keepalive_disabled_accounts", False)
+                if not include_disabled and not account.get("enabled", True):
                     continue
-
-                log.info("【自动保活】正在为账号 %s (%s) 执行静默续期与 VM 唤醒...", label, aid)
-                res = await asyncio.to_thread(_probe_account_sync, aid, False)
-                results.append(res)
-                log.info("【自动保活】账号 %s 执行结果: ok=%s expires_at=%s", label, res.get("ok"), res.get("expires_at"))
-                await asyncio.sleep(0.5)
-
-            summary = {
-                "checked_at": now,
-                "refreshed_count": len(results),
-                "refreshed": results,
-                "skipped_count": len(skipped),
-                "skipped": skipped,
-            }
-            KEEPALIVE_STATE["last_result"] = summary
-            KEEPALIVE_STATE["next_run"] = now + 900
+                aid = account["id"]
+                keep_due = (settings.keepalive_enabled or not with_quota) and operation_due(
+                    account, "keepalive", settings.keepalive_interval_minutes, now, force)
+                quota_due = with_quota and settings.quota_enabled and operation_due(
+                    account, "quota", settings.quota_interval_minutes, now, force)
+                if not keep_due and not quota_due:
+                    skipped.append({"id": aid, "reason": "未到维护周期"})
+                    continue
+                if keep_due:
+                    result = await asyncio.to_thread(_probe_account_sync, aid, False)
+                    results.append({"operation": "keepalive", **result})
+                    if result.get("ok"):
+                        KEEPALIVE_STATE["last_keepalive_at"] = int(time.time())
+                    elif not result.get("busy"):
+                        continue
+                if quota_due:
+                    try:
+                        quota = await asyncio.to_thread(_query_quota_sync, aid, True)
+                        results.append({"operation": "quota", "id": aid, "ok": True,
+                                        "checked_at": quota["checked_at"]})
+                        KEEPALIVE_STATE["last_quota_at"] = quota["checked_at"]
+                    except HTTPException as exc:
+                        skipped.append({"id": aid, "operation": "quota", "busy": exc.status_code == 409,
+                                        "error": safe_message(str(exc.detail))})
+                    except Exception as exc:
+                        reason = safe_message(str(exc))
+                        store.update_account(aid, quota_checked_at=int(time.time()), quota_error=reason)
+                        journal.error("maintenance.quota_failed", exc, account_id=aid,
+                                      stage="quota", reason=reason)
+                        results.append({"operation": "quota", "id": aid, "ok": False, "error": reason})
+            summary = {"checked_at": now, "refreshed_count": len(results), "refreshed": results,
+                       "skipped_count": len(skipped), "skipped": skipped}
+            KEEPALIVE_STATE.update(last_result=summary, next_run=int(time.time()) + 30)
             return summary
         finally:
             KEEPALIVE_STATE["running"] = False
+
+
+async def run_keepalive_all(force: bool = False) -> dict:
+    return await _run_maintenance(force, with_quota=False)
+
+
+async def run_account_maintenance(force: bool = False) -> dict:
+    return await _run_maintenance(force, with_quota=True)
 
 
 def _warmup_browser_sync():
@@ -2519,27 +2635,29 @@ def _warmup_browser_sync():
 
 
 async def _keepalive_loop():
-    """后台常驻守护任务：每 15 分钟轮询一次账号健康状态并保持 VM 热备，同时静默同步仓库更新。"""
-    log.info("【自动保活守护进程】已启动，检测周期: 15 分钟")
+    """Short scheduler tick, persisted per-operation cadence, serial account work."""
+    log.info("账号维护后台已启动：按设置自动刷新会话/额度，忙碌账号跳过")
     await asyncio.sleep(1)
-    try:
-        await asyncio.to_thread(_check_update_sync, True)
-    except Exception:
-        pass
-    try:
-        await asyncio.to_thread(_warmup_browser_sync)
-    except Exception as e:  # noqa: BLE001
-        log.warning("【浏览器预热】异常: %s", e)
+    last_update_check = 0.0
     while True:
         try:
-            await asyncio.to_thread(_check_update_sync, True)
-        except Exception:
-            pass
+            # Repository checks are unrelated to the quota cadence.
+            if time.monotonic() - last_update_check >= 900:
+                await asyncio.to_thread(_check_update_sync, True)
+                last_update_check = time.monotonic()
+            await run_account_maintenance(force=False)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            journal.error("maintenance.loop_failed", exc, stage="maintenance",
+                          reason=safe_message(str(exc)))
+        KEEPALIVE_STATE["next_run"] = int(time.time()) + 30
         try:
-            await run_keepalive_all(force=False)
-        except Exception as e:  # noqa: BLE001
-            log.error("【自动保活守护进程】轮询异常: %s", e)
-        await asyncio.sleep(900)
+            await asyncio.wait_for(_MAINTENANCE_WAKEUP.wait(), timeout=30)
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            _MAINTENANCE_WAKEUP.clear()
 
 
 @app.post("/admin/accounts/keepalive")
@@ -2559,13 +2677,177 @@ async def trigger_keepalive_single(aid: str, _=Depends(auth)):
 @app.get("/admin/keepalive/status")
 def get_keepalive_status(_=Depends(auth)):
     """获取保活守护协程状态。"""
-    return KEEPALIVE_STATE
+    return {**copy.deepcopy(KEEPALIVE_STATE), "settings": maintenance_settings.get().model_dump()}
+
+
+class MaintenancePatch(BaseModel):
+    model_config = {"extra": "forbid", "strict": True}
+    keepalive_enabled: bool | None = None
+    keepalive_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    quota_enabled: bool | None = None
+    quota_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    include_disabled: bool | None = None
+
+
+@app.get("/admin/maintenance/settings")
+def get_maintenance_settings(_=Depends(auth)):
+    return {"settings": maintenance_settings.get().model_dump(),
+            "state": copy.deepcopy(KEEPALIVE_STATE),
+            "settings_load_error": maintenance_settings.load_error}
+
+
+@app.put("/admin/maintenance/settings")
+def update_maintenance_settings(req: MaintenancePatch, _=Depends(auth)):
+    changes = req.model_dump(exclude_none=True, exclude_unset=True)
+    value = maintenance_settings.update(changes)
+    _wake_maintenance()
+    journal.emit("maintenance.settings_updated", stage="maintenance", settings=value.model_dump())
+    return {"settings": value.model_dump(), "state": copy.deepcopy(KEEPALIVE_STATE)}
+
+
+@app.post("/admin/maintenance/run", status_code=202)
+async def trigger_account_maintenance(_=Depends(auth)):
+    global _MAINTENANCE_MANUAL_TASK
+    if KEEPALIVE_STATE["running"] or (_MAINTENANCE_MANUAL_TASK and not _MAINTENANCE_MANUAL_TASK.done()):
+        return {"status": "busy", "message": "账号维护正在执行"}
+    _MAINTENANCE_MANUAL_TASK = asyncio.create_task(run_account_maintenance(force=True))
+    return {"status": "queued"}
+
+
+@app.get("/admin/logs")
+def get_diagnostic_logs(task_id: str | None = None, account_id: str | None = None,
+                        level: str | None = None, limit: int = 100,
+                        offset: int = 0, _=Depends(auth)):
+    if limit < 1 or limit > 200 or offset < 0 or offset > 100000:
+        raise HTTPException(400, "日志分页参数无效")
+    if level:
+        level = level.lower()
+    if level and level not in ("debug", "info", "warning", "error", "critical"):
+        raise HTTPException(400, "日志级别无效")
+    page = journal.read(offset=offset, limit=limit, task_id=task_id,
+                        account_id=account_id, level=level)
+    return {**{k: v for k, v in page.items() if k != "items"}, "entries": page["items"],
+            "health": journal.health()}
+
+
+@app.get("/admin/tasks/{task_id}/logs")
+def get_task_logs(task_id: str, limit: int = 100, offset: int = 0,
+                  account_id: str | None = None, level: str | None = None, _=Depends(auth)):
+    # Deleted tasks can still have retained diagnostic records.
+    return get_diagnostic_logs(task_id=task_id, account_id=account_id, level=level,
+                               limit=limit, offset=offset, _=_)
+
+
+# ------------------------- Web-managed native OTP login -------------------------
+@contextmanager
+def _login_browser_slot():
+    if not GEN_LOCK.acquire(timeout=30):
+        raise TimeoutError("浏览器繁忙，请稍后重试批量登录")
+    try:
+        yield
+    finally:
+        GEN_LOCK.release()
+
+
+def _save_logged_in_account(cookies, expires, identity, *, label="", proxy=None, proxy_id=None):
+    # Login worker already verified this new isolated session upstream.
+    deadline = time.monotonic() + 30
+    with ACCOUNT_POOL.cond:
+        while True:
+            keys = identity_keys(identity)
+            conflicting = {a["id"] for a in store.accounts
+                           if (cookies.get("hatch_sess") and a.get("cookies", {}).get("hatch_sess") == cookies["hatch_sess"])
+                           or keys & identity_keys(a.get("identity"))}
+            if not conflicting & ACCOUNT_POOL.busy_accounts:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise MuseGenerationError("该账号正在执行任务，暂不替换登录会话；请空闲时重试")
+            ACCOUNT_POOL.cond.wait(timeout=min(remaining, 0.5))
+        kwargs = {"identity": identity}
+        if proxy is not None:
+            kwargs["proxy"] = proxy
+        account = store.add_account(cookies, label, cookies_exp=expires, **kwargs)
+        store.update_account(account["id"], ok=True, note="网页登录认证成功", synced_at=int(time.time()))
+    journal.emit("login.account_saved", account_id=account["id"], stage="login")
+    _wake_maintenance()
+    return account["id"]
+
+
+def _login_event(event: dict):
+    fields = {k: v for k, v in event.items() if k not in ("event", "time")}
+    journal.emit(event.get("event", "login.event"), **fields)
+
+
+login_service = AutoLoginService(engine, _save_logged_in_account,
+                                 slot=_login_browser_slot, on_event=_login_event)
+
+
+class LoginAccountInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    account: str = Field(min_length=3, max_length=254)
+    otp_url: str | None = Field(default=None, max_length=2048)
+    label: str = Field(default="", max_length=80)
+
+
+class LoginBatchInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    accounts: list[LoginAccountInput] = Field(min_length=1, max_length=20)
+
+
+class LoginOtpInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    index: int = Field(ge=0, le=19)
+    code: SecretStr
+
+
+def _login_call(method, *args):
+    try:
+        return method(*args)
+    except LoginNotFoundError:
+        raise HTTPException(404, "登录批次或条目不存在（服务重启后需重新提交）") from None
+    except LoginCapacityError as exc:
+        raise HTTPException(429, safe_message(str(exc))) from None
+    except LoginConflictError as exc:
+        raise HTTPException(409, safe_message(str(exc))) from None
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(400, safe_message(str(exc))) from None
+
+
+@app.post("/admin/login/batches", status_code=202)
+async def create_login_batch(req: LoginBatchInput, _=Depends(auth)):
+    return await asyncio.to_thread(_login_call, login_service.submit,
+                                   [a.model_dump(exclude_none=True) for a in req.accounts])
+
+
+@app.get("/admin/login/batches")
+def list_login_batches(_=Depends(auth)):
+    return {"batches": login_service.list_batches()}
+
+
+@app.get("/admin/login/batches/{batch_id}")
+def get_login_batch(batch_id: str, _=Depends(auth)):
+    return _login_call(login_service.status, batch_id)
+
+
+@app.post("/admin/login/batches/{batch_id}/otp")
+def submit_login_otp(batch_id: str, req: LoginOtpInput, _=Depends(auth)):
+    code = req.code.get_secret_value()
+    if not re.fullmatch(r"[0-9]{6}", code):
+        raise HTTPException(400, "验证码须为6位数字")
+    return _login_call(login_service.submit_otp, batch_id, req.index, code)
+
+
+@app.post("/admin/login/batches/{batch_id}/cancel")
+def cancel_login_batch(batch_id: str, _=Depends(auth)):
+    return _login_call(login_service.cancel, batch_id)
 
 
 # ------------------------- 仓库实时更新检测、通知与一键在线升级 -------------------------
 REPO_URL = "https://github.com/wxxz975/muse2api"
 TRACKED_REPO_PATHS = [
     "app.py", "engine.py", "store.py", "cdp.py", "config.py", "proxy.py",
+    "maintenance.py", "diagnostics.py", "account_identity.py", "autologin.py",
     "admin.html", "README.md", "version.json", "requirements.txt",
     "Dockerfile", "docker-compose.yml", ".env.example", ".gitignore",
     "LICENSE", "extension", "deploy", "tools",
@@ -2941,16 +3223,32 @@ async def admin_repo_push(payload: dict = Body(default={}), _=Depends(auth)):
 async def _startup():
     for task in list(store.tasks.values()):
         if task.get("kind") in ("image", "video") and task.get("status") in ("queued", "processing"):
-            store.update_task(task["id"], status="failed", error="服务重启中断了任务，请重新提交")
+            _record_task_failure(task["id"], RuntimeError("服务重启中断了任务，请重新提交"))
+    accounts = store.list_accounts()
+    KEEPALIVE_STATE["last_keepalive_at"] = max((a.get("last_keepalive") or 0 for a in accounts), default=0) or None
+    KEEPALIVE_STATE["last_quota_at"] = max(((a.get("quota") or {}).get("checked_at") or 0 for a in accounts), default=0) or None
+    report = getattr(store, "migration_report", {})
+    if report.get("merged") or report.get("conflicts"):
+        journal.emit("accounts.deduplicated", stage="startup", merged=report.get("merged", 0),
+                     conflict_count=len(report.get("conflicts", [])))
     if not CFG.api_key:
         import secrets
         new_key = "m2a_" + secrets.token_hex(24)
         CFG.api_key = new_key
         _persist_env("MUSE2API_KEY", new_key)
-        log.info("🔑 未检测到 MUSE2API_KEY，已自动生成初始密钥: %s", new_key)
-    asyncio.create_task(_keepalive_loop())
+        log.info("未检测到 MUSE2API_KEY，已生成初始密钥并保存至服务配置文件；日志不回显密钥")
+    global _MAINTENANCE_TASK
+    _MAINTENANCE_TASK = asyncio.create_task(_keepalive_loop())
+    journal.emit("service.started", stage="startup")
 
 
 @app.on_event("shutdown")
-def _shutdown():
+async def _shutdown():
+    tasks = [t for t in (_MAINTENANCE_TASK, _MAINTENANCE_MANUAL_TASK) if t and not t.done()]
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    login_service.close()
     engine.stop()
+    journal.emit("service.stopped", stage="shutdown")

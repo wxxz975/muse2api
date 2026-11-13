@@ -110,7 +110,11 @@ def quota(*args, **kwargs):
     assert app._account_proxy(app.store.get_account(aid)) == PROXY
     assert kwargs["account_id"] == aid
     return {"found": True, "extra_left": "1B tokens left"}
-with patch.object(app.engine, "start"), patch.object(app.engine, "quota", side_effect=quota):
+def quota_renew(cookies, expires=None, **kwargs):
+    assert kwargs.get("proxy") == PROXY and kwargs.get("wake_vm") is False
+    return {"ok": True, "cookies": cookies, "cookies_exp": expires or {}, "vm_state": "RUNNING"}
+with patch.object(app.engine, "start"), patch.object(app.engine, "quota", side_effect=quota), \
+     patch.object(app.engine, "renew_session_http", side_effect=quota_renew):
     assert asyncio.run(app.query_quota(aid))["found"]
 assert aid not in app.ACCOUNT_POOL.busy_accounts
 assert not hasattr(app.engine._ensure_local(), "proxy_snapshot")

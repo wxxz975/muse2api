@@ -139,8 +139,27 @@
   .badge.mute{color:var(--muted);border-color:var(--line);background:var(--bg2)}
   .badge.info{color:var(--accent);border-color:rgba(79,140,255,.35);background:rgba(79,140,255,.1)}
   .acts{display:flex;gap:6px;flex-wrap:wrap}
-  #poolBody td.ellip{display:table-cell;white-space:normal;overflow-wrap:anywhere}
-  #poolBody .proxy-summary{display:block;max-width:100%}
+  #keepaliveBadge{white-space:normal;overflow-wrap:anywhere;max-width:100%}
+  .account-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),1fr));gap:16px;align-items:stretch}
+  .account-card{min-width:0;padding:18px;border:1px solid var(--line2);border-radius:14px;background:linear-gradient(145deg,rgba(24,36,60,.9),var(--bg2));display:flex;flex-direction:column;gap:16px;box-shadow:0 6px 20px rgba(0,0,0,.12)}
+  .account-card.is-disabled{opacity:.8}.account-card.is-error{border-color:rgba(248,113,113,.4)}
+  .account-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.account-identity{min-width:0;flex:1}
+  .account-identity h4{font-size:16px;line-height:1.4;overflow-wrap:anywhere;margin:0 0 5px}.account-id{font-size:11px;overflow-wrap:anywhere}
+  .account-plan{font-size:12px;font-weight:600;color:#c4b5fd;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);border-radius:7px;padding:3px 9px;max-width:48%;overflow-wrap:anywhere}
+  .account-status{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.account-status .badge{font-size:11px}
+  .account-quota{background:rgba(6,9,17,.35);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .quota-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:8px;color:var(--muted)}
+  .quota-heading strong{font-size:14px;color:var(--text);white-space:nowrap}.quota-track{height:10px;border-radius:99px;background:#202c44;overflow:hidden}
+  .quota-fill{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#16a34a,var(--ok));transition:width .2s}
+  .quota-track.warn .quota-fill{background:var(--warn)}.quota-track.bad .quota-fill{background:var(--bad)}.quota-track.unknown{border:1px dashed #46516b;background:transparent}
+  .quota-reset{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;line-height:1.65;margin-top:8px}.quota-reset b{color:var(--text);font-weight:500}.quota-raw{font-size:10.5px;opacity:.8}
+  .account-extra{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}.account-extra .quota-heading strong{font-size:12px}
+  .account-times{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:0}.account-times>div{min-width:0}.account-times dt{color:var(--muted);font-size:11px;margin-bottom:3px}.account-times dd{margin:0;font-size:11.5px;overflow-wrap:anywhere;line-height:1.65}
+  .account-proxy{font-size:11.5px;border-top:1px solid var(--line);padding-top:12px;overflow-wrap:anywhere}.account-proxy .proxy-summary{display:block;margin-top:4px;color:var(--muted);max-width:none}
+  .account-note,.account-quota-error{font-size:11.5px;line-height:1.65;overflow-wrap:anywhere;color:var(--muted)}.account-quota-error{color:var(--warn)}.account-note{margin:0}
+  .account-times{order:1}.account-quota{order:2}.account-proxy,.account-note,.account-quota-error{order:3}.account-actions{order:4;margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap}.account-actions button{font-size:11.5px;padding:5px 9px}
+  .account-grid>.empty{grid-column:1/-1;border:1px dashed var(--line2);border-radius:12px}
+  @media(max-width:430px){.account-card{padding:14px}.account-times{grid-template-columns:1fr}.account-plan{max-width:44%}}
   .empty{text-align:center;color:var(--muted);padding:34px 10px;font-size:13px}
 
   /* ---------- 媒体库 ---------- */
@@ -196,6 +215,24 @@
   .keybox.miss .lbl{color:var(--warn)}
   .langsel{width:auto;flex:0 0 auto;background:var(--bg2);color:var(--text);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
   .updpill-alert{border-color:rgba(251,191,36,.8)!important;background:rgba(251,191,36,.15)!important;color:var(--warn)!important;animation:pulse 1.6s infinite}
+  /* Maintenance, OTP login and diagnostic views keep scrolling inside cards. */
+  .automation-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
+  .automation-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+  .automation-form>div,.automation-actions>div,.automation-state>div{min-width:0}
+  .check-label{display:flex;align-items:center;gap:8px;color:var(--text);margin:0 0 8px}
+  .check-label input{accent-color:var(--accent);flex:0 0 auto}
+  .automation-state{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px;margin-top:14px}
+  .automation-state dt{color:var(--muted);font-size:12px}.automation-state dd{margin:4px 0;overflow-wrap:anywhere}
+  .automation-message{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted);margin:8px 0}
+  .automation-message.error{color:var(--bad)}
+  .automation-table td{vertical-align:top;overflow-wrap:anywhere;max-width:350px}
+  .automation-table pre,.task-error pre{max-width:100%;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+  .automation-table summary,.task-error summary{cursor:pointer;color:var(--accent)}
+  .otp-form{display:flex;gap:6px;flex-wrap:wrap;align-items:end;max-width:300px;margin-top:8px}
+  .otp-form label{flex:1 1 130px;margin:0}.otp-form input[type=password]{width:100%;padding:8px;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:7px}
+  .log-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px;align-items:end}
+  #loginAccounts{width:100%;min-width:0}#loginBatchId{overflow-wrap:anywhere}
+  @media(max-width:600px){.automation-table{min-width:650px}.automation-actions button{white-space:normal}.row>div{min-width:min(100%,170px)}#toasts{right:12px;left:12px}.toast{max-width:100%}}
 </style>
 </head>
 <body>
@@ -280,7 +317,10 @@
   <nav class="tabs">
     <button class="active" data-t="pool">账号池</button>
     <button data-t="cookie">获取 Cookie</button>
+    <button data-t="login">批量登录</button>
+    <button data-t="maintenance">维护设置</button>
     <button data-t="tasks">任务记录</button>
+    <button data-t="logs">诊断日志</button>
     <button data-t="media">媒体库</button>
     <button data-t="play">接口测试</button>
     <button data-t="docs">接入文档</button>
@@ -354,22 +394,18 @@
 
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0">
           <h3 style="margin:0">账号列表 <span class="tag" id="poolCount">0</span></h3>
-          <span class="badge ok" id="keepaliveBadge" style="font-size:11px">● 自动保活轮转中 (30m)</span>
+          <span class="badge mute" id="keepaliveBadge" style="font-size:11px">维护状态待加载</span>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="secondary" id="btnKeepaliveAll" onclick="keepaliveAll()" style="font-size:12px;padding:6px 14px">⚡ 一键保活所有账号</button>
+          <button class="secondary" id="btnKeepaliveAll" onclick="runMaintenance()" style="font-size:12px;padding:6px 14px">立即维护账号池</button>
         </div>
       </div>
-      <div class="hint" data-i18n="keepalive-hint">系统已开启<b>后台每 30 分钟静默保活</b>与<b>多账号公平轮转（LRU）</b>；「测试」会真实打开 muse.ai 验证会话。</div>
-      <div class="tblwrap"><table>
-        <thead><tr>
-          <th>标签</th><th>账号 ID</th><th>状态</th><th>有效期</th><th>额度</th><th data-i18n="col-enabled">启用</th><th>Cookie</th>
-          <th>最后使用</th><th>备注</th><th style="min-width:250px">操作</th>
-        </tr></thead>
-        <tbody id="poolBody"><tr><td colspan="10" class="empty">加载中…</td></tr></tbody>
-      </table></div>
+      <div class="hint" data-i18n="keepalive-hint">保活与额度查询按「维护设置」运行，保存后立即生效；「最近业务使用」只记录真实生成请求，不因保活或检测而更新。</div>
+      <div class="hint"><span>最近保活</span>：<span id="poolLastKeepalive" class="mono">—</span> · <span>最近额度查询</span>：<span id="poolLastQuota" class="mono">—</span></div>
+      <div class="hint">额度为最近成功查询的快照；重置与到期文案按上游原文展示，不推算下次重置日期。</div>
+      <div id="poolBody" class="account-grid" aria-label="账号卡片"><div class="empty">加载中…</div></div>
     </div>
   </section>
 
@@ -520,6 +556,79 @@
         </tbody>
       </table></div>
       <div class="hint" style="margin:12px 0 0;line-height:1.85" data-i18n="lifetime-hint">登录会话是否有效以上游认证为准。hatch_vml 是可选工作区令牌，可能缺失或重新签发，不能仅凭缺少它或其到期时间判断账号失效。导入后请点击“测试”；收到 HTTP 401 时再重新登录并导入。</div>
+    </div>
+  </section>
+
+  <!-- ==================== 批量 OTP 登录 ==================== -->
+  <section class="tab" id="tab-login">
+    <div class="card">
+      <h3>批量登录 <span class="tag">邮箱 / 手机号 + 验证码</span></h3>
+      <p class="hint">每行：邮箱或手机号 | OTP_URL | 标签；只填账号时手动输入 6 位验证码。最多 20 个账号，不支持密码登录。</p>
+      <p class="hint">仅使用你有权访问的账号和取码地址。验证码、取码链接仅用于本次任务，不保存到浏览器；提交后输入会清空。远程访问请使用 HTTPS。</p>
+      <label for="loginAccounts">待登录账号</label>
+      <textarea id="loginAccounts" rows="5" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="user@example.com | https://mail.example.com/inbox | main&#10;user2@example.com" data-no-i18n></textarea>
+      <div class="automation-actions">
+        <button type="button" id="loginStart" onclick="startLoginBatch()">开始批量登录</button>
+        <button type="button" class="ghost" onclick="clearLoginInputs()">清空输入</button>
+        <button type="button" class="ghost" id="loginRefresh" onclick="refreshLoginBatch()" disabled>刷新登录状态</button>
+        <button type="button" class="danger" id="loginCancel" onclick="cancelLoginBatch()" disabled>取消批次</button>
+      </div>
+      <div id="loginMessage" class="automation-message" role="status" aria-live="polite"></div>
+      <div class="hint"><span>批次 ID</span>：<span id="loginBatchId" class="mono" data-no-i18n>—</span> · <span id="loginBatchStatus">尚未提交</span></div>
+      <p class="hint">遇到 CAPTCHA、MFA 或首次引导时需要人工处理，系统不会绕过验证或将其标记为成功。</p>
+      <div class="tblwrap"><table class="automation-table">
+        <thead><tr><th>序号</th><th>账号 / 标签</th><th>状态 / 阶段</th><th>详情 / 验证码</th></tr></thead>
+        <tbody id="loginBody"><tr><td colspan="4" class="empty">尚未提交</td></tr></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ==================== 维护设置 ==================== -->
+  <section class="tab" id="tab-maintenance">
+    <div class="card">
+      <h3>维护设置 <span class="tag">保存后立即生效</span></h3>
+      <p class="hint">保活与额度查询周期独立配置，单位为分钟（1–10080）。保活、检测和额度查询不会改变最近业务使用时间。</p>
+      <form id="maintenanceForm">
+        <div class="automation-form">
+          <div><label class="check-label"><input id="maintenanceKeepaliveEnabled" type="checkbox">启用自动保活</label><label for="maintenanceKeepaliveInterval">保活间隔（分钟）</label><input id="maintenanceKeepaliveInterval" type="number" min="1" max="10080" step="1" required></div>
+          <div><label class="check-label"><input id="maintenanceQuotaEnabled" type="checkbox">启用自动额度查询</label><label for="maintenanceQuotaInterval">额度查询间隔（分钟）</label><input id="maintenanceQuotaInterval" type="number" min="1" max="10080" step="1" required></div>
+        </div>
+        <label class="check-label" style="margin-top:16px"><input id="maintenanceIncludeDisabled" type="checkbox">包含已禁用账号</label>
+        <div class="automation-actions">
+          <button type="submit" id="maintenanceSave" disabled>保存维护设置</button>
+          <button type="button" class="ghost" onclick="loadMaintenanceSettings()">重新加载设置</button>
+          <button type="button" class="ghost" id="maintenanceRun" onclick="runMaintenance()">立即维护账号池</button>
+        </div>
+      </form>
+      <div id="maintenanceMessage" class="automation-message" role="status" aria-live="polite"></div>
+      <span id="maintenanceStatus" class="badge mute">维护状态待加载</span>
+      <dl class="automation-state">
+        <div><dt>最近维护</dt><dd id="maintenanceLastRun" class="mono">—</dd></div>
+        <div><dt>下次调度检查</dt><dd id="maintenanceNextRun" class="mono">—</dd></div>
+        <div><dt>最近保活</dt><dd id="maintenanceLastKeepalive" class="mono">—</dd></div>
+        <div><dt>最近额度查询</dt><dd id="maintenanceLastQuota" class="mono">—</dd></div>
+      </dl>
+      <details><summary>最近维护结果（脱敏 JSON）</summary><pre id="maintenanceResult" class="out" data-no-i18n>—</pre></details>
+    </div>
+  </section>
+
+  <!-- ==================== 诊断日志 ==================== -->
+  <section class="tab" id="tab-logs">
+    <div class="card">
+      <h3>诊断日志</h3>
+      <p class="hint">按任务、账号和级别筛选。只展示脱敏诊断信息；失败任务的错误和详情仍保留在任务记录中。</p>
+      <form id="logsForm" class="log-filters">
+        <div><label for="logsTaskId">任务 ID</label><input id="logsTaskId" type="text" maxlength="200" autocomplete="off" placeholder="全部任务"></div>
+        <div><label for="logsAccountId">账号 ID</label><input id="logsAccountId" type="text" maxlength="200" autocomplete="off" placeholder="全部账号"></div>
+        <div><label for="logsLevel">日志级别</label><select id="logsLevel"><option value="">全部级别</option><option value="debug">DEBUG</option><option value="info">INFO</option><option value="warning">WARNING</option><option value="error">ERROR</option><option value="critical">CRITICAL</option></select></div>
+        <div><button type="submit" id="logsRefresh" class="ghost">刷新日志</button></div>
+      </form>
+      <div id="logsMessage" class="automation-message" role="status" aria-live="polite"></div>
+      <div class="automation-actions"><span>日志条目</span><span id="logsCount" class="mono">0</span><span>偏移</span><span id="logsOffset" class="mono">0</span><button type="button" id="logsPrev" class="ghost mini" onclick="previousLogsPage()" disabled>上一页</button><button type="button" id="logsNext" class="ghost mini" onclick="nextLogsPage()" disabled>下一页</button></div>
+      <div class="tblwrap"><table class="automation-table">
+        <thead><tr><th>时间 / 级别</th><th>事件 / 阶段</th><th>任务 / 账号</th><th>消息 / 详情</th></tr></thead>
+        <tbody id="logsBody"><tr><td colspan="4" class="empty">暂无日志</td></tr></tbody>
+      </table></div>
     </div>
   </section>
 
@@ -799,6 +908,134 @@ function setLang(v){
 }
 /* 整句：中文 → 英文 */
 const I18N_EN = {
+  "套餐": "Plan",
+  "周额度用量": "Weekly quota used",
+  "额外额度用量": "Extra quota used",
+  "额度重置": "Quota reset",
+  "额外剩余": "Extra remaining",
+  "额外额度到期": "Extra quota expires",
+  "上游原文": "Upstream text",
+  "Cookie 有效期": "Cookie expiry",
+  "估算有效期": "Estimated expiry",
+  "已记录到期时间，不代表会话认证有效": "Recorded expiry does not confirm authentication validity",
+  "Cookie 数量": "Cookie count",
+  "额度查询失败，保留上次成功快照": "Quota query failed; last successful snapshot retained",
+  "额度快照超过 1 小时，请重新查询": "Quota snapshot is older than one hour; query it again",
+  "未设置套餐": "Unknown plan",
+  "账号卡片": "Account cards",
+  "额度为最近成功查询的快照；重置与到期文案按上游原文展示，不推算下次重置日期。": "Quota values are snapshots from the last successful query. Reset and expiry text is shown as provided upstream; no next-reset date is inferred.",
+  "最近保活成功": "Last successful keep-alive",
+  "启用状态": "Enabled status",
+  "代理地址不可识别": "Unrecognized proxy address",
+  "刷新额度": "Refresh quota",
+  "未配置代理": "Default network (no proxy)",
+  "Cookie 到期提醒不等于认证失效，请先测试会话；上游确认失效后再重新登录。": "A recorded cookie expiry is not proof of authentication failure. Test the session first; sign in again only if the upstream confirms it is invalid.",
+  "批量登录": "Batch login",
+  "维护设置": "Maintenance settings",
+  "诊断日志": "Diagnostic logs",
+  "维护状态待加载": "Maintenance status not loaded",
+  "立即维护账号池": "Run pool maintenance now",
+  "最近业务使用": "Last generation use",
+  "最近保活": "Last keep-alive",
+  "最近额度查询": "Last quota query",
+  "邮箱 / 手机号 + 验证码": "Email / phone + verification code",
+  "每行：邮箱或手机号 | OTP_URL | 标签；只填账号时手动输入 6 位验证码。最多 20 个账号，不支持密码登录。": "One account per line: email or phone | OTP_URL | label. Enter only an account for a manual 6-digit code. Maximum 20 accounts; password login is not supported.",
+  "仅使用你有权访问的账号和取码地址。验证码、取码链接仅用于本次任务，不保存到浏览器；提交后输入会清空。远程访问请使用 HTTPS。": "Use only accounts and OTP sources you are authorized to access. Codes and OTP URLs are used only for this task, are not saved in browser storage, and inputs are cleared on submission. Use HTTPS for remote access.",
+  "待登录账号": "Accounts to sign in",
+  "开始批量登录": "Start batch login",
+  "清空输入": "Clear inputs",
+  "刷新登录状态": "Refresh login status",
+  "取消批次": "Cancel batch",
+  "批次 ID": "Batch ID",
+  "尚未提交": "Not submitted",
+  "遇到 CAPTCHA、MFA 或首次引导时需要人工处理，系统不会绕过验证或将其标记为成功。": "CAPTCHA, MFA and onboarding require manual action. The system will not bypass them or report them as successful.",
+  "序号": "Index",
+  "账号 / 标签": "Account / label",
+  "状态 / 阶段": "Status / stage",
+  "详情 / 验证码": "Details / verification code",
+  "保存后立即生效": "Changes take effect immediately after saving",
+  "保活与额度查询周期独立配置，单位为分钟（1–10080）。保活、检测和额度查询不会改变最近业务使用时间。": "Configure keep-alive and quota intervals independently, in minutes (1–10080). Maintenance and checks do not change the last generation-use time.",
+  "启用自动保活": "Enable automatic keep-alive",
+  "保活间隔（分钟）": "Keep-alive interval (minutes)",
+  "启用自动额度查询": "Enable automatic quota queries",
+  "额度查询间隔（分钟）": "Quota interval (minutes)",
+  "包含已禁用账号": "Include disabled accounts",
+  "保存维护设置": "Save maintenance settings",
+  "重新加载设置": "Reload settings",
+  "最近维护": "Last maintenance run",
+  "下次调度检查": "Next scheduler check",
+  "最近维护结果（脱敏 JSON）": "Last maintenance result (redacted JSON)",
+  "按任务、账号和级别筛选。只展示脱敏诊断信息；失败任务的错误和详情仍保留在任务记录中。": "Filter by task, account and level. Only redacted diagnostics are shown; failed tasks retain their errors and details in the task history.",
+  "全部任务": "All tasks",
+  "全部账号": "All accounts",
+  "日志级别": "Log level",
+  "全部级别": "All levels",
+  "刷新日志": "Refresh logs",
+  "日志条目": "Log entries",
+  "偏移": "Offset",
+  "上一页": "Previous page",
+  "下一页": "Next page",
+  "时间 / 级别": "Time / level",
+  "事件 / 阶段": "Event / stage",
+  "任务 / 账号": "Task / account",
+  "消息 / 详情": "Message / details",
+  "暂无日志": "No logs yet",
+  "安全详情": "Safe details",
+  "查看日志": "View logs",
+  "错误详情": "Error details",
+  "请求超时，请手动刷新状态。": "Request timed out. Refresh the status manually.",
+  "请先填入待登录账号。": "Enter the accounts to sign in first.",
+  "每批最多 20 个账号。": "Each batch is limited to 20 accounts.",
+  "输入过长，请减少本批次内容。": "Input is too long. Reduce the batch size.",
+  "输入格式有误，请检查行号": "Invalid input format; check line",
+  "请使用邮箱或手机号，不支持账号密码格式。": "Use an email address or phone number, not an account/password pair.",
+  "取码地址必须是无用户名密码的 HTTP(S) URL。": "The OTP URL must be HTTP(S) without a username or password.",
+  "标签过长。": "The label is too long.",
+  "请先结束当前批次。": "Finish or cancel the current batch first.",
+  "正在提交登录批次…": "Submitting login batch…",
+  "登录批次已提交，输入已清空。": "Login batch submitted; inputs cleared.",
+  "登录响应缺少批次 ID。": "The login response has no batch ID.",
+  "登录批次提交失败": "Could not submit login batch",
+  "登录状态读取失败": "Could not read login status",
+  "自动刷新已停止，请手动刷新状态。": "Automatic refresh stopped. Refresh the status manually.",
+  "登录状态更新中…": "Updating login status…",
+  "需要人工处理验证，未确认登录成功。": "Manual verification required. Login success has not been confirmed.",
+  "等待手动验证码": "Waiting for manual code",
+  "6 位验证码": "6-digit verification code",
+  "提交验证码": "Submit verification code",
+  "请输入 6 位数字验证码。": "Enter a 6-digit verification code.",
+  "验证码已提交，输入已清空。": "Code submitted; input cleared.",
+  "验证码提交失败": "Could not submit code",
+  "取消批次失败": "Could not cancel batch",
+  "已请求取消批次。": "Batch cancellation requested.",
+  "排队中": "Queued",
+  "处理中": "Running",
+  "等待验证码": "Waiting for code",
+  "登录成功": "Signed in",
+  "已失败": "Failed",
+  "已取消": "Cancelled",
+  "需要人工处理": "Manual action required",
+  "已完成": "Completed",
+  "已中断": "Interrupted",
+  "状态未知": "Unknown status",
+  "保活已启用": "Keep-alive enabled",
+  "保活已关闭": "Keep-alive disabled",
+  "额度查询已启用": "Quota queries enabled",
+  "额度查询已关闭": "Quota queries disabled",
+  "分钟": "minutes",
+  "维护运行中": "Maintenance running",
+  "维护空闲": "Maintenance idle",
+  "维护已排队": "Maintenance queued",
+  "维护设置响应不完整。": "The maintenance settings response is incomplete.",
+  "维护设置加载失败": "Could not load maintenance settings",
+  "维护状态读取失败": "Could not read maintenance status",
+  "周期必须为 1–10080 分钟的整数。": "Intervals must be whole minutes from 1 to 10080.",
+  "维护设置已保存并立即生效。": "Maintenance settings saved and applied immediately.",
+  "维护设置保存失败": "Could not save maintenance settings",
+  "维护已排队，将按已保存设置在后台执行。": "Maintenance queued; it will run in the background using the saved settings.",
+  "维护执行失败": "Could not queue maintenance",
+  "日志加载失败": "Could not load logs",
+  "日志持久化异常，请检查服务端磁盘权限与空间。": "Diagnostic persistence failed. Check server disk permissions and free space.",
   "代理配置已保存，账号浏览器状态待测试": "Proxy saved; account browser status still needs testing",
   "代理地址或完整链接": "Proxy address or full URL",
   "可直接粘贴包含用户名和密码的 HTTP、SOCKS5 或 SOCKS5h 链接，立即测试，无需先保存。": "Paste an HTTP, SOCKS5 or SOCKS5h URL including credentials and test it immediately, without saving.",
@@ -1216,7 +1453,7 @@ const I18N_EN_HTML = {
   "auth-banner": "\n      <b>Enter your API Key first so the page can load data</b><br>\n      <span style=\"color:var(--muted)\">\n        The API Key is this service's own \"access password\". It stops other people from using your Muse account quota.\n        It is <b style=\"color:var(--text)\">not</b> your Muse password. It is a random string generated at deploy time (it starts with <code>m2a_</code>).<br>\n        Paste it into the box at the top right and click \"Save\". Your browser remembers it, so you won't need to enter it again.\n      </span>\n    ",
   "model-names-hint": "\n        Model names: <code>muse-spark</code> (chat/code), <code>muse-image</code> (images), <code>muse-video</code> (videos).\n        See the \"Integration Docs\" tab for full examples.\n      ",
   "add-account-hint": "\n        Copy the <b>muse.ai</b> cookie string from your browser and paste it here. Required cookies:\n        <code>hatch_sess</code>. <code>hatch_vml</code> is an optional workspace token and does not block import.\n        For batch import, put one account per line in the format <code>label | cookie string</code> (label is optional).\n      ",
-  "keepalive-hint": "The system runs <b>a silent background keep-alive every 30 minutes</b> and <b>fair multi-account rotation (LRU)</b>. \"Test\" actually opens muse.ai to verify the session.",
+  "keepalive-hint": "Keep-alive and quota queries follow Maintenance Settings and changes take effect immediately after saving. Last generation use records real generation requests only, never maintenance or checks.",
   "ext-why-hint": "\n        A small browser extension syncs <b>the muse.ai login you already have on your own computer</b>.\n        No Python, no terminal, no commands.<br>\n        <b>Why an extension is required</b>: muse.ai's login session cookie is marked\n        <code>httpOnly</code>, so page scripts (typing <code>document.cookie</code> in F12,\n        bookmarklets) can't read them. Only a browser extension's <code>cookies</code> API can.\n      ",
   "ext-unzip-hint": "\n            Unzip it to a folder you won't delete, e.g. <code>D:\\muse2api-extension</code>.\n          ",
   "ext-load-steps": "\n            <li>Type <code>chrome://extensions</code> in the address bar and press Enter</li>\n            <li>Turn on the <b>Developer mode</b> switch at the top right</li>\n            <li>Click <b>Load unpacked</b> at the top left</li>\n            <li>Select the <b>folder</b> you unzipped in step 1 (not a single file inside it)</li>\n          ",
@@ -1528,11 +1765,349 @@ document.querySelectorAll('nav.tabs button').forEach(b => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     $('tab-' + b.dataset.t).classList.add('active');
+    pauseAutomationViews();
     if (b.dataset.t === 'tasks') loadTasks();
+    if (b.dataset.t === 'login') refreshLoginBatch();
+    if (b.dataset.t === 'maintenance') loadMaintenanceSettings();
+    if (b.dataset.t === 'logs') loadLogs();
+    resumeAutomationViews();
     if (b.dataset.t === 'media') loadMedia();
     if (b.dataset.t === 'cookie') $('cmdText').textContent = buildCmd($('inBase').value);
   };
 });
+
+/* ================= 管理自动化：脱敏、超时与有限轮询 ================= */
+function safeAutomationText(value){
+  let text = String(value == null ? '' : value).slice(0, 12000);
+  if (KEY) text = text.split(KEY).join('[REDACTED]');
+  return text.replace(/https?:\/\/[^\s<>"']+/gi, '[URL]')
+    .replace(/\b(?:Bearer|Basic)\s+[^\s,;]+/gi, '[REDACTED]')
+    .replace(/\b(?:authorization|set-cookie|cookies?|password|passwd|pwd|otp(?:_url)?|(?:access_|refresh_|api_)?token|api_key|secret|hatch_[\w]+)[\"']?\s*[:=]\s*[^\r\n]*/gi, '[REDACTED]')
+    .replace(/\b(?:m2a_[\w-]+|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, '[REDACTED]')
+    .replace(/\b\d{6}\b/g, '[REDACTED]');
+}
+function safeDiagnostic(value, depth = 0){
+  if (depth > 7) return '[TRUNCATED]';
+  if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') return safeAutomationText(value);
+  if (Array.isArray(value)) return value.slice(0, 100).map(v => safeDiagnostic(v, depth + 1));
+  const out = Object.create(null);
+  for (const [key, item] of Object.entries(value).slice(0, 80)) {
+    const secret = /cookie|authorization|password|passwd|secret|token|otp|credential|hatch_|prompt|base64|html|content|request_body/i.test(key);
+    out[safeAutomationText(key)] = secret ? '[REDACTED]' : safeDiagnostic(item, depth + 1);
+  }
+  return out;
+}
+function diagnosticJSON(value){ return JSON.stringify(safeDiagnostic(value), null, 2); }
+function automationMessage(id, message, error = false){
+  $(id).textContent = safeAutomationText(message);
+  $(id).classList.toggle('error', error);
+}
+function automationError(id, prefix, error){
+  automationMessage(id, t(prefix) + ': ' + t(safeAutomationText(error?.message || error)), true);
+}
+function automationTime(value){
+  if (!value) return '—';
+  const date = typeof value === 'number' ? new Date(value < 1e12 ? value * 1000 : value) : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '—';
+  return date.toLocaleString(LANG === 'en' ? 'en-GB' : 'zh-CN', {hour12:false});
+}
+async function automationApi(path, options = {}){
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  let timedOut = false;
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener('abort', abort, {once:true});
+  const timeout = setTimeout(() => { timedOut = true; abort(); }, 20000);
+  try { return await api(path, {...options, signal:controller.signal}); }
+  catch (error) { if (timedOut) throw new Error(t('请求超时，请手动刷新状态。')); throw error; }
+  finally { clearTimeout(timeout); options.signal?.removeEventListener('abort', abort); }
+}
+function activeAutomationTab(name){ return !document.hidden && $('tab-' + name).classList.contains('active'); }
+function boundedPoller(visible, hasWork, refresh, stopped){
+  let timer = null, controller = null, busy = false, attempts = 0, errors = 0;
+  function pause(){ if (timer != null) clearTimeout(timer); timer = null; controller?.abort(); }
+  function reset(){ pause(); attempts = 0; errors = 0; }
+  function schedule(){
+    if (!visible() || !hasWork() || busy || timer != null) return;
+    if (attempts >= 300 || errors >= 5) { stopped(); return; }
+    timer = setTimeout(() => { timer = null; void run(); }, Math.min(30000, 3000 * 2 ** errors));
+  }
+  async function run(){
+    if (!visible() || !hasWork() || busy) return;
+    if (attempts >= 300 || errors >= 5) { stopped(); return; }
+    if (timer != null) clearTimeout(timer); timer = null;
+    controller = new AbortController(); busy = true; attempts++;
+    try { await refresh(controller.signal); errors = 0; }
+    catch (error) { if (!controller.signal.aborted) errors++; }
+    finally { controller = null; busy = false; schedule(); }
+  }
+  return {pause, reset, schedule, run};
+}
+
+/* ================= 批量 OTP 登录 ================= */
+let loginBatch = null, loginSubmitting = false;
+const LOGIN_TERMINAL = new Set(['completed','succeeded','failed','cancelled','canceled','interrupted','needs_manual','manual_required','captcha']);
+const LOGIN_STATUSES = {
+  queued:'排队中', running:'处理中', processing:'处理中', waiting_otp:'等待验证码', succeeded:'登录成功',
+  failed:'已失败', cancelled:'已取消', canceled:'已取消', needs_manual:'需要人工处理', manual_required:'需要人工处理',
+  captcha:'需要人工处理', completed:'已完成', interrupted:'已中断'
+};
+const LOGIN_MANUAL = new Set(['needs_manual','manual_required','captcha','onboarding','mfa']);
+function loginStatus(value){ return t(LOGIN_STATUSES[value] || '状态未知'); }
+function parseLoginAccounts(raw){
+  if (raw.length > 100000) throw new Error(t('输入过长，请减少本批次内容。'));
+  const lines = raw.split(/\r?\n/).map((line,index) => ({line:line.trim(),index:index+1})).filter(row => row.line);
+  if (!lines.length) throw new Error(t('请先填入待登录账号。'));
+  if (lines.length > 20) throw new Error(t('每批最多 20 个账号。'));
+  return lines.map(({line,index}) => {
+    const parts = line.split('|').map(part => part.trim());
+    const fail = reason => { throw new Error(t('输入格式有误，请检查行号') + ' ' + index + ': ' + t(reason)); };
+    if (parts.length > 3) fail('请使用邮箱或手机号，不支持账号密码格式。');
+    const [account, otpURL = '', label = ''] = parts;
+    if (account.length > 254 || !(/^[^\s@|<>:]+@[^\s@|<>:]+\.[^\s@|<>:]+$/.test(account) || /^\+?[0-9][0-9 ()-]{5,24}$/.test(account))) fail('请使用邮箱或手机号，不支持账号密码格式。');
+    if (otpURL) {
+      let url; try { url = new URL(otpURL); } catch (error) { fail('取码地址必须是无用户名密码的 HTTP(S) URL。'); }
+      if (!['http:','https:'].includes(url.protocol) || url.username || url.password || otpURL.length > 2048) fail('取码地址必须是无用户名密码的 HTTP(S) URL。');
+    }
+    if (label.length > 80) fail('标签过长。');
+    return {account, ...(otpURL ? {otp_url:otpURL} : {}), ...(label ? {label} : {})};
+  });
+}
+function normalizeLoginBatch(data){
+  if (!data?.id || typeof data.id !== 'string') throw new Error(t('登录响应缺少批次 ID。'));
+  return {id:data.id, status:String(data.status || data.state || 'unknown'), items:(Array.isArray(data.items) ? data.items : []).slice(0,20).map((item,index) => ({
+    index:Number.isInteger(item.index) && item.index >= 0 && item.index < 20 ? item.index : index,
+    account:safeAutomationText(item.masked_account || item.account || ''), label:safeAutomationText(item.label || ''),
+    status:String(item.status || item.state || 'unknown'), stage:safeAutomationText(item.stage || ''),
+    error:safeDiagnostic(item.error || item.reason || ''), account_id:safeAutomationText(item.account_id || '')
+  }))};
+}
+function loginHasWork(){ return !!loginBatch && !LOGIN_TERMINAL.has(loginBatch.status); }
+function clearLoginInputs(){
+  $('loginAccounts').value = '';
+  document.querySelectorAll('#loginBody input').forEach(input => { input.value = ''; });
+}
+function renderLoginBatch(){
+  if (!loginBatch) return;
+  $('loginBatchId').textContent = safeAutomationText(loginBatch.id);
+  $('loginBatchStatus').textContent = loginStatus(loginBatch.status);
+  $('loginStart').disabled = loginSubmitting || loginHasWork();
+  $('loginRefresh').disabled = false;
+  $('loginCancel').disabled = !loginHasWork();
+  // Rebuild status rows, but preserve each pending form so polling never erases a code while it is being typed.
+  const oldForms = new Map([...document.querySelectorAll('#loginBody form[data-index]')].map(form => [Number(form.dataset.index),form]));
+  const focused = document.activeElement;
+  const focusIndex = [...oldForms].find(([,form]) => form.querySelector('input') === focused)?.[0];
+  const selection = focusIndex == null ? null : [focused.selectionStart,focused.selectionEnd];
+  const rows = loginBatch.items.map(item => {
+    const row = document.createElement('tr');
+    const cls = item.status === 'succeeded' ? 'ok' : item.status === 'failed' ? 'bad' : 'warn';
+    const details = item.error ? (typeof item.error === 'string' ? item.error : diagnosticJSON(item.error)) : '';
+    row.innerHTML = '<td class="mono">' + (item.index+1) + '</td><td data-no-i18n>' + esc(item.account || '—') + '<div class="mono">' + esc(item.label) + '</div></td>' +
+      '<td><span class="badge ' + cls + '">' + esc(loginStatus(item.status)) + '</span><div class="mono" data-no-i18n>' + esc(item.stage) + '</div></td>' +
+      '<td><div class="automation-message" data-no-i18n>' + esc(details) + '</div>' +
+      (LOGIN_MANUAL.has(item.status) || LOGIN_MANUAL.has(item.stage) ? '<div>' + esc(t('需要人工处理验证，未确认登录成功。')) + '</div>' : '') +
+      (item.account_id ? '<div class="mono" data-no-i18n>' + esc(item.account_id) + '</div>' : '') + '</td>';
+    if (item.status === 'waiting_otp' && loginHasWork()) {
+      const form = oldForms.get(item.index) || document.createElement('form');
+      if (!form.dataset.index) {
+        form.className = 'otp-form'; form.dataset.index = String(item.index);
+        const label = document.createElement('label'); label.textContent = t('6 位验证码');
+        const input = document.createElement('input');
+        input.type = 'password'; input.inputMode = 'numeric'; input.maxLength = 6; input.pattern = '[0-9]{6}'; input.required = true; input.autocomplete = 'off';
+        label.append(input); const button = document.createElement('button'); button.type = 'submit'; button.className = 'mini'; button.textContent = t('提交验证码');
+        form.append(label,button);
+        form.addEventListener('submit', event => { event.preventDefault(); void submitLoginOTP(item.index,form); });
+      }
+      row.lastElementChild.append(form);
+    }
+    return row;
+  });
+  $('loginBody').replaceChildren(...rows);
+  if (focusIndex != null && loginHasWork() && loginBatch.items.some(item => item.index === focusIndex && item.status === 'waiting_otp')) {
+    focused.focus({preventScroll:true});
+    if (selection?.[0] != null) focused.setSelectionRange(...selection);
+  }
+  if (!loginHasWork()) loginPoller.pause();
+  if (!rows.length) $('loginBody').innerHTML = '<tr><td colspan="4" class="empty">—</td></tr>';
+}
+async function startLoginBatch(){
+  if (loginSubmitting) return;
+  if (loginHasWork()) { automationMessage('loginMessage',t('请先结束当前批次。'),true); return; }
+  let body;
+  try { body = JSON.stringify({accounts:parseLoginAccounts($('loginAccounts').value)}); }
+  catch (error) { automationMessage('loginMessage',error.message,true); return; }
+  clearLoginInputs(); loginSubmitting = true; $('loginStart').disabled = true;
+  automationMessage('loginMessage',t('正在提交登录批次…'));
+  try {
+    const data = await automationApi('/admin/login/batches',{method:'POST',body});
+    loginBatch = normalizeLoginBatch(data); renderLoginBatch();
+    automationMessage('loginMessage',t('登录批次已提交，输入已清空。'));
+    loginPoller.reset(); loginPoller.schedule();
+  } catch (error) { automationError('loginMessage','登录批次提交失败',error); }
+  finally { body = ''; loginSubmitting = false; $('loginStart').disabled = loginHasWork(); }
+}
+async function fetchLoginBatch(signal){
+  const id = loginBatch?.id; if (!id) return;
+  const data = await automationApi('/admin/login/batches/' + encodeURIComponent(id),{signal});
+  if (signal?.aborted || loginBatch?.id !== id) return;
+  loginBatch = normalizeLoginBatch(data); renderLoginBatch();
+  if (!loginHasWork()) { loginPoller.pause(); void loadPool(); }
+}
+async function refreshLoginBatch(){
+  if (!loginBatch) return;
+  loginPoller.reset();
+  try { await fetchLoginBatch(); automationMessage('loginMessage',''); }
+  catch (error) { automationError('loginMessage','登录状态读取失败',error); }
+  finally { loginPoller.schedule(); }
+}
+async function submitLoginOTP(index,form){
+  const input = form.querySelector('input'), button = form.querySelector('button');
+  if (button.disabled) return;
+  let code = input.value.trim(); input.value = '';
+  if (!/^[0-9]{6}$/.test(code)) { code = ''; automationMessage('loginMessage',t('请输入 6 位数字验证码。'),true); return; }
+  const id = loginBatch?.id; if (!id) { code = ''; return; }
+  button.disabled = true;
+  try {
+    await automationApi('/admin/login/batches/' + encodeURIComponent(id) + '/otp',{method:'POST',body:JSON.stringify({index,code})});
+    code = ''; automationMessage('loginMessage',t('验证码已提交，输入已清空。')); loginPoller.reset(); await loginPoller.run();
+  } catch (error) { automationError('loginMessage','验证码提交失败',error); }
+  finally { code = ''; input.value = ''; button.disabled = false; }
+}
+async function cancelLoginBatch(){
+  if (!loginHasWork()) return;
+  const id = loginBatch.id; $('loginCancel').disabled = true; loginPoller.pause(); clearLoginInputs();
+  try {
+    const data = await automationApi('/admin/login/batches/' + encodeURIComponent(id) + '/cancel',{method:'POST'});
+    if (data?.id) { loginBatch = normalizeLoginBatch(data); renderLoginBatch(); }
+    else await fetchLoginBatch();
+    automationMessage('loginMessage',t('已请求取消批次。'));
+  } catch (error) { automationError('loginMessage','取消批次失败',error); }
+  finally { $('loginCancel').disabled = !loginHasWork(); loginPoller.schedule(); }
+}
+const loginPoller = boundedPoller(() => activeAutomationTab('login'),loginHasWork,fetchLoginBatch,() => automationMessage('loginMessage',t('自动刷新已停止，请手动刷新状态。'),true));
+
+/* ================= 周期维护设置 ================= */
+let maintenanceState = {}, maintenanceSettings = null, maintenanceLoading = false, maintenanceSaving = false, maintenanceQueued = false;
+function renderMaintenanceState(data){
+  maintenanceState = safeDiagnostic(data.state || data || {});
+  const state = maintenanceState;
+  if (state.running) maintenanceQueued = false;
+  const label = state.running ? '维护运行中' : maintenanceQueued ? '维护已排队' : '维护空闲';
+  $('maintenanceStatus').textContent = t(label); $('maintenanceStatus').className = 'badge ' + (state.running || maintenanceQueued ? 'info' : 'mute');
+  $('maintenanceLastRun').textContent = automationTime(state.last_run);
+  $('maintenanceNextRun').textContent = automationTime(state.next_run);
+  for (const id of ['maintenanceLastKeepalive','poolLastKeepalive']) $(id).textContent = automationTime(state.last_keepalive_at);
+  for (const id of ['maintenanceLastQuota','poolLastQuota']) $(id).textContent = automationTime(state.last_quota_at);
+  $('maintenanceResult').textContent = state.last_result == null ? '—' : diagnosticJSON(state.last_result);
+  $('maintenanceRun').disabled = !!state.running || maintenanceQueued;
+  $('btnKeepaliveAll').disabled = !!state.running || maintenanceQueued;
+  const settings = data.settings || maintenanceSettings;
+  if (settings) {
+    const text = [t(settings.keepalive_enabled ? '保活已启用' : '保活已关闭') + ' (' + safeAutomationText(settings.keepalive_interval_minutes) + ' ' + t('分钟') + ')',
+      t(settings.quota_enabled ? '额度查询已启用' : '额度查询已关闭') + ' (' + safeAutomationText(settings.quota_interval_minutes) + ' ' + t('分钟') + ')'];
+    $('keepaliveBadge').textContent = text.join(' · ');
+    $('keepaliveBadge').className = 'badge ' + (settings.keepalive_enabled || settings.quota_enabled ? 'info' : 'mute');
+  }
+}
+function populateMaintenanceSettings(data){
+  const settings = data?.settings;
+  if (!settings || !Number.isInteger(settings.keepalive_interval_minutes) || !Number.isInteger(settings.quota_interval_minutes)) throw new Error(t('维护设置响应不完整。'));
+  maintenanceSettings = settings;
+  $('maintenanceKeepaliveEnabled').checked = !!settings.keepalive_enabled;
+  $('maintenanceQuotaEnabled').checked = !!settings.quota_enabled;
+  $('maintenanceIncludeDisabled').checked = !!settings.include_disabled;
+  $('maintenanceKeepaliveInterval').value = settings.keepalive_interval_minutes;
+  $('maintenanceQuotaInterval').value = settings.quota_interval_minutes;
+  $('maintenanceSave').disabled = false;
+  renderMaintenanceState(data);
+}
+async function loadMaintenanceSettings(){
+  if (maintenanceLoading || maintenanceSaving) return;
+  maintenanceLoading = true;
+  try { populateMaintenanceSettings(await automationApi('/admin/maintenance/settings')); automationMessage('maintenanceMessage',''); maintenancePoller.schedule(); }
+  catch (error) { automationError('maintenanceMessage','维护设置加载失败',error); }
+  finally { maintenanceLoading = false; }
+}
+async function saveMaintenanceSettings(event){
+  event?.preventDefault(); if (maintenanceSaving) return;
+  const keepalive = Number($('maintenanceKeepaliveInterval').value), quota = Number($('maintenanceQuotaInterval').value);
+  if (![keepalive,quota].every(value => Number.isInteger(value) && value >= 1 && value <= 10080)) {
+    automationMessage('maintenanceMessage',t('周期必须为 1–10080 分钟的整数。'),true); return;
+  }
+  maintenanceSaving = true; $('maintenanceSave').disabled = true;
+  try {
+    const settings = {keepalive_enabled:$('maintenanceKeepaliveEnabled').checked, keepalive_interval_minutes:keepalive,
+      quota_enabled:$('maintenanceQuotaEnabled').checked, quota_interval_minutes:quota, include_disabled:$('maintenanceIncludeDisabled').checked};
+    const data = await automationApi('/admin/maintenance/settings',{method:'PUT',body:JSON.stringify(settings)});
+    populateMaintenanceSettings(data); automationMessage('maintenanceMessage',t('维护设置已保存并立即生效。'));
+  } catch (error) { automationError('maintenanceMessage','维护设置保存失败',error); }
+  finally { maintenanceSaving = false; $('maintenanceSave').disabled = !maintenanceSettings; }
+}
+async function fetchMaintenanceState(signal){
+  const data = await automationApi('/admin/keepalive/status',{signal}); if (signal?.aborted) return;
+  maintenanceQueued = false; renderMaintenanceState(data);
+  if (!maintenanceState.running) maintenancePoller.pause();
+}
+async function runMaintenance(){
+  if (maintenanceState.running || maintenanceQueued) return;
+  maintenanceQueued = true; $('maintenanceRun').disabled = true; $('btnKeepaliveAll').disabled = true;
+  try {
+    await automationApi('/admin/maintenance/run',{method:'POST'});
+    automationMessage('maintenanceMessage',t('维护已排队，将按已保存设置在后台执行。'));
+    toast(t('维护已排队，将按已保存设置在后台执行。'),'ok');
+    renderMaintenanceState({state:maintenanceState,settings:maintenanceSettings}); maintenancePoller.reset(); maintenancePoller.schedule();
+  } catch (error) { maintenanceQueued = false; renderMaintenanceState({state:maintenanceState}); automationError('maintenanceMessage','维护执行失败',error); }
+}
+const maintenancePoller = boundedPoller(() => activeAutomationTab('maintenance') || activeAutomationTab('pool'),() => !!maintenanceState.running || maintenanceQueued,fetchMaintenanceState,() => {
+  maintenanceQueued = false; renderMaintenanceState({state:maintenanceState}); automationMessage('maintenanceMessage',t('自动刷新已停止，请手动刷新状态。'),true);
+});
+$('maintenanceForm').addEventListener('submit',saveMaintenanceSettings);
+
+/* ================= 脱敏诊断日志与分页 ================= */
+let logsOffset = 0, logsNextOffset = null, logsHistory = [], logsQuery = '', logsRequest = null, logsGeneration = 0;
+function logFilters(){ return {task_id:$('logsTaskId').value.trim(),account_id:$('logsAccountId').value.trim(),level:$('logsLevel').value.toLowerCase()}; }
+async function loadLogs(offset = 0){
+  logsRequest?.abort(); const controller = new AbortController(); logsRequest = controller;
+  const generation = ++logsGeneration, filters = logFilters(), fingerprint = JSON.stringify(filters);
+  if (logsQuery !== fingerprint || offset === 0) { logsHistory = []; offset = 0; }
+  logsQuery = fingerprint;
+  const params = new URLSearchParams({limit:'100',offset:String(offset)});
+  if (filters.account_id) params.set('account_id',filters.account_id);
+  if (filters.level) params.set('level',filters.level);
+  const path = filters.task_id ? '/admin/tasks/' + encodeURIComponent(filters.task_id) + '/logs' : '/admin/logs';
+  $('logsRefresh').disabled = true;
+  try {
+    const data = await automationApi(path + '?' + params,{signal:controller.signal});
+    if (controller.signal.aborted || generation !== logsGeneration) return;
+    const entries = (Array.isArray(data?.entries) ? data.entries : []).slice(0,100).map(entry => safeDiagnostic(entry));
+    logsOffset = Number.isInteger(data?.offset) && data.offset >= 0 ? data.offset : offset;
+    logsNextOffset = Number.isInteger(data?.next_offset) && data.next_offset > logsOffset ? data.next_offset : null;
+    $('logsCount').textContent = Number.isInteger(data?.total) ? data.total : entries.length;
+    $('logsOffset').textContent = logsOffset;
+    $('logsBody').innerHTML = entries.length ? entries.map(entry => {
+      const level = String(entry.level || ''), cls = /ERROR|CRITICAL/i.test(level) ? 'bad' : /WARN/i.test(level) ? 'warn' : 'mute';
+      return '<tr><td><div class="mono">' + esc(automationTime(entry.time)) + '</div><span class="badge ' + cls + '">' + esc(level) + '</span></td>' +
+        '<td data-no-i18n>' + esc(entry.event) + '<div class="mono">' + esc(entry.stage) + '</div></td>' +
+        '<td class="mono" data-no-i18n>' + esc(entry.task_id) + '<br>' + esc(entry.account_id) + '</td>' +
+        '<td><div class="automation-message" data-no-i18n>' + esc(typeof (entry.message ?? entry.reason) === 'object' ? diagnosticJSON(entry.message ?? entry.reason) : (entry.message ?? entry.reason)) + '</div>' +
+        '<details><summary>' + esc(t('安全详情')) + '</summary><pre data-no-i18n>' + esc(diagnosticJSON(entry)) + '</pre></details></td></tr>';
+    }).join('') : '<tr><td colspan="4" class="empty">' + esc(t('暂无日志')) + '</td></tr>';
+    $('logsPrev').disabled = !logsHistory.length; $('logsNext').disabled = logsNextOffset == null;
+    if (data?.health?.ok === false) automationMessage('logsMessage',t('日志持久化异常，请检查服务端磁盘权限与空间。') + ' ' + safeAutomationText(data.health.error_type),true);
+    else automationMessage('logsMessage','');
+  } catch (error) { if (!controller.signal.aborted && generation === logsGeneration) automationError('logsMessage','日志加载失败',error); }
+  finally { if (generation === logsGeneration) { $('logsRefresh').disabled = false; logsRequest = null; } }
+}
+async function nextLogsPage(){ if (logsNextOffset == null) return; logsHistory.push(logsOffset); await loadLogs(logsNextOffset); }
+async function previousLogsPage(){ if (!logsHistory.length) return; const offset = logsHistory.pop(); await loadLogs(offset); }
+function openTaskLogs(id){ $('logsTaskId').value = id; $('logsAccountId').value = ''; $('logsLevel').value = ''; goTab('logs'); }
+$('logsForm').addEventListener('submit',event => { event.preventDefault(); void loadLogs(); });
+function pauseAutomationViews(){ loginPoller.pause(); maintenancePoller.pause(); tasksPoller.pause(); logsRequest?.abort(); }
+function resumeAutomationViews(){ loginPoller.schedule(); maintenancePoller.schedule(); tasksPoller.schedule(); }
+document.addEventListener('visibilitychange',() => { if (document.hidden) pauseAutomationViews(); else resumeAutomationViews(); });
+window.addEventListener('pagehide',() => { pauseAutomationViews(); clearLoginInputs(); });
 
 /* ================= 接入信息 / API Key ================= */
 let realKey = '';
@@ -1623,31 +2198,83 @@ async function rotateKey(){
   }catch(e){ toast('生成失败：' + e.message, 'bad'); }
 }
 
-/* ================= 额度显示 ================= */
-function quotaBadge(a){
-  const q = a.quota;
-  if (!q || !q.found){
-    return '<span class="badge mute" title="还没查过。点「操作」里的「额度」实时查询">未查</span>';
-  }
-  const pct = (q.weekly_used_pct != null) ? q.weekly_used_pct : null;
-  const cls = pct == null ? 'info' : pct < 50 ? 'ok' : pct < 80 ? 'warn' : 'bad';
-  const plan = (q.plan || '').replace(/\s*plan\s*$/i, '') || '—';
-  let title = `计划：${q.plan || '?'}`;
-  if (q.weekly_reset) title += `\n周限额重置：${q.weekly_reset}`;
-  if (pct != null) title += `\n周用量：已用 ${pct}%`;
-  if (q.extra_left) title += `\n额外代币：剩 ${q.extra_left}（已用 ${q.extra_used_pct ?? '?'}%）`;
-  if (q.checked_at) title += `\n查询时间：${fmtTime(q.checked_at)}`;
-  if (q.checked_at && Date.now()/1000 - q.checked_at > 3600) title += '\n额度数据已超过 1 小时，需重新查询';
-  const main = pct != null ? `${plan} · 已用 ${pct}%` : plan;
-  const age = q.checked_at ? `<div class="mono" style="font-size:10px;color:var(--muted);margin-top:2px">查询 ${ago(q.checked_at)}</div>` : '';
-  const sub = (q.extra_left ? `<div class="mono" style="font-size:11px;color:var(--muted);margin-top:2px">+${esc(q.extra_left)}</div>` : '') + age;
-  return `<span class="badge ${cls}" title="${esc(title)}">${esc(main)}</span>${sub}`;
+/* ================= 账号额度卡片 ================= */
+function quotaPercent(value){ return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null; }
+function accountTimestamp(value){
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  const date = new Date(value < 1e12 ? value * 1000 : value);
+  return Number.isFinite(date.getTime()) ? date : null;
 }
+function accountTime(value){
+  const date = accountTimestamp(value);
+  return date ? date.toLocaleString(LANG === 'en' ? 'en-GB' : 'zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) + ' (Asia/Shanghai)' : t('未知');
+}
+function quotaRawText(value){
+  if (typeof value === 'number') return accountTime(value);
+  return typeof value === 'string' && value.trim() ? safeAutomationText(value) : t('未知');
+}
+function quotaProgress(label,value){
+  const percent = quotaPercent(value), cls = percent == null ? 'unknown' : percent >= 80 ? 'bad' : percent >= 50 ? 'warn' : '';
+  return '<div class="quota-heading"><span>' + esc(t(label)) + '</span><strong>' + (percent == null ? esc(t('未知')) : percent + '%') + '</strong></div>' +
+    '<div class="quota-track ' + cls + '" role="progressbar" aria-label="' + esc(t(label)) + '" aria-valuemin="0" aria-valuemax="100"' +
+    (percent == null ? ' aria-valuetext="' + esc(t('未知')) + '"' : ' aria-valuenow="' + percent + '"') + '>' + (percent == null ? '' : '<span class="quota-fill" style="width:' + percent + '%"></span>') + '</div>';
+}
+function quotaCardDetails(quota){
+  const q = quota || {};
+  return '<div class="account-quota">' + quotaProgress('周额度用量',q.weekly_used_pct) +
+    '<div class="quota-reset"><span>' + esc(t('额度重置')) + '</span> <span class="quota-raw">(' + esc(t('上游原文')) + ')</span><br><b data-no-i18n>' + esc(quotaRawText(q.weekly_reset)) + '</b></div>' +
+    '<div class="account-extra">' + quotaProgress('额外额度用量',q.extra_used_pct) +
+    '<div class="quota-reset"><span>' + esc(t('额外剩余')) + '</span>：<b data-no-i18n>' + esc(typeof q.extra_left === 'string' && q.extra_left.trim() ? safeAutomationText(q.extra_left) : t('未知')) + '</b></div>' +
+    '<div class="quota-reset"><span>' + esc(t('额外额度到期')) + '</span> <span class="quota-raw">(' + esc(t('上游原文')) + ')</span>：<b data-no-i18n>' + esc(quotaRawText(q.extra_expires)) + '</b></div></div></div>';
+}
+function expiryBadge(account){
+  const date = accountTimestamp(account?.expires_at);
+  if (!date) return '<span class="badge mute">' + esc(t('未知')) + '</span>';
+  const expired = date.getTime() <= Date.now(), label = expired ? '已过期' : account.expires_estimated ? '估算有效期' : '已记录到期时间，不代表会话认证有效';
+  return '<span class="badge ' + (expired ? 'warn' : 'mute') + '" title="' + esc(t('已记录到期时间，不代表会话认证有效')) + '">' + esc(t(label)) + '</span>';
+}
+function accountProxyText(account){
+  if (!account.proxy?.server) return t('未配置代理');
+  try { const proxy = new URL(account.proxy.server); return proxy.protocol + '//' + proxy.host; }
+  catch (error) { return t('代理地址不可识别'); }
+}
+function accountCard(account){
+  const q = account.quota || {}, id = esc(account.id), enabled = !!account.enabled;
+  const status = !enabled ? '已禁用' : account.ok === true ? '● 可用' : account.ok === false ? '● 异常' : '○ 未检测';
+  const cls = !enabled ? 'mute' : account.ok === true ? 'ok' : account.ok === false ? 'bad' : 'warn';
+  const plan = typeof q.plan === 'string' && q.plan.trim() ? safeAutomationText(q.plan) : t('未知');
+  const action = (name,label,danger=false) => '<button type="button" class="' + (danger ? 'danger' : 'ghost') + ' mini" data-account-action="' + name + '" data-account-id="' + id + '">' + esc(t(label)) + '</button>';
+  const time = (label,value) => '<div><dt>' + esc(t(label)) + '</dt><dd class="mono">' + esc(accountTime(value)) + '</dd></div>';
+  const old = accountTimestamp(q.checked_at) && Date.now() - accountTimestamp(q.checked_at).getTime() > 3600000;
+  return '<article class="account-card' + (!enabled ? ' is-disabled' : account.ok === false ? ' is-error' : '') + '" data-account-card="' + id + '">' +
+    '<div class="account-top"><div class="account-identity"><h4 data-no-i18n>' + esc(safeAutomationText(account.label || account.id)) + '</h4><div class="account-id mono" data-no-i18n>' + id + '</div></div><div class="account-plan" title="' + esc(t('套餐')) + '" data-no-i18n>' + esc(plan) + '</div></div>' +
+    '<div class="account-status"><span class="badge ' + cls + '">' + esc(t(status)) + '</span>' +
+    '<span class="badge mute">' + esc(t('Cookie 数量')) + ' · ' + (Number.isInteger(account.cookie_count) && account.cookie_count >= 0 ? account.cookie_count : esc(t('未知'))) + '</span>' +
+    (account.essential_ok === false ? '<span class="badge bad">' + esc(t('缺核心')) + '</span>' : '') + '</div>' + quotaCardDetails(q) +
+    (account.quota_error ? '<div class="account-quota-error"><span>' + esc(t('额度查询失败，保留上次成功快照')) + '</span><div data-no-i18n>' + esc(safeAutomationText(account.quota_error)) + '</div></div>' : old ? '<div class="account-quota-error">' + esc(t('额度快照超过 1 小时，请重新查询')) + '</div>' : '') +
+    '<dl class="account-times"><div><dt>' + esc(t('Cookie 有效期')) + '</dt><dd class="mono">' + esc(accountTime(account.expires_at)) + '<div>' + expiryBadge(account) + '</div></dd></div>' +
+    time('最近额度查询',q.checked_at) + time('最近保活成功',account.last_keepalive) + time('最近业务使用',account.last_used) + '</dl>' +
+    '<div class="account-proxy"><span>' + esc(t('代理')) + '</span> · <span class="mono" data-no-i18n>' + esc(accountProxyText(account)) + '</span>' + proxyStatus(account) + '</div>' +
+    (account.note ? '<p class="account-note" data-no-i18n>' + esc(safeAutomationText(account.note)) + '</p>' : '') +
+    '<div class="account-actions">' + action('test','测试') + action('keepalive','保活') + action('quota','刷新额度') + action('proxy','代理') +
+    action('toggle',enabled ? '禁用' : '启用') + action('rename','改名') + action('cookies','更新Cookie') + action('delete','删除',true) + '</div></article>';
+}
+async function handleAccountAction(event){
+  const button = event.target.closest('button[data-account-action]');
+  if (!button || button.disabled) return;
+  const account = accounts.find(item => item.id === button.dataset.accountId); if (!account) return;
+  const calls = {test:() => testAcc(account.id),keepalive:() => keepaliveOne(account.id),quota:() => queryQuota(account.id,button),proxy:() => openProxy(account.id),
+    toggle:() => toggleAcc(account.id,!account.enabled),rename:() => renameAcc(account.id,account.label || ''),cookies:() => updateCookies(account.id),delete:() => delAcc(account.id,account.label || '')};
+  try { await calls[button.dataset.accountAction]?.(); }
+  catch (error) { toast(t('操作失败：') + safeAutomationText(error.message),'bad'); }
+}
+$('poolBody').addEventListener('click',handleAccountAction);
 
+/* ================= 额度显示 ================= */
 async function queryQuota(aid, btn){
   if (btn){ btn.disabled = true; btn.textContent = '查询中…'; }
   try{
-    const q = await api(`/admin/accounts/${aid}/quota`, {method:'POST'});
+    const q = await api(`/admin/accounts/${encodeURIComponent(aid)}/quota`, {method:'POST'});
     if (q.found){
       const extra = q.extra_left ? `，额外剩 ${q.extra_left}` : '';
       toast(`额度：${q.plan || '?'}，周用量已用 ${q.weekly_used_pct ?? '?'}%${extra}`, 'ok');
@@ -1657,26 +2284,8 @@ async function queryQuota(aid, btn){
     loadPool();
   }catch(e){
     toast('额度查询失败：' + e.message, 'bad');
-    if (btn){ btn.disabled = false; btn.textContent = '额度'; }
+    if (btn){ btn.disabled = false; btn.textContent = t('刷新额度'); }
   }
-}
-
-/* ================= 有效期显示 ================= */
-function expiryBadge(a){
-  const ts = a && a.expires_at;
-  if (!ts) return '<span class="badge mute" title="未记录有效期">未知</span>';
-  const est = a.expires_estimated
-    ? '（按 hatch_vml 约 2 天寿命推算，未取到精确 expires）'
-    : '（hatch_vml 实测到期时间）';
-  const left = ts - Math.floor(Date.now() / 1000);
-  if (left <= 0) return `<span class="badge bad" title="已于 ${fmtTime(ts)} 过期${est}">已过期</span>`;
-  const days = left / 86400;
-  // 保留一位小数，别把「还剩 1.9 天」显示成「剩 1 天」（会让人以为快没了）
-  const txt = days >= 1
-    ? `剩 ${days >= 10 ? Math.round(days) : days.toFixed(1)} 天`
-    : `剩 ${Math.max(1, Math.floor(left / 3600))} 小时`;
-  const cls = days < 1 ? 'bad' : days < 3 ? 'warn' : 'ok';
-  return `<span class="badge ${cls}" title="到期时间：${fmtTime(ts)}${est}">${txt}</span>`;
 }
 
 /* ================= 账号池 ================= */
@@ -1688,14 +2297,14 @@ function proxyStatus(account){
   const label = !status?.checked_at ? '代理未测试'
     : status.proxy_reachable === true ? '代理已连通'
     : status.proxy_reachable === false ? '代理未通过' : '代理未确认';
-  const title = status?.checked_at ? fmtTime(status.checked_at) : '';
+  const title = status?.checked_at ? accountTime(status.checked_at) : '';
   return '<div class="proxy-summary" title="' + esc(title) + '">' + esc(t(label)) + '</div>';
 }
 
 async function loadPool(){
   try{
     const d = await api('/admin/accounts');
-    accounts = d.accounts || [];
+    accounts = Array.isArray(d?.accounts) ? d.accounts : [];
     const st = d.stats || {};
     $('sTotal').textContent = st.total ?? accounts.length;
     $('sOk').textContent    = st.healthy ?? 0;
@@ -1705,63 +2314,19 @@ async function loadPool(){
     $('pAcc').className = 'pill ' + (accounts.length ? 'on' : 'off');
     $('pAcc').innerHTML = `<span class="led"></span>账号 <b>${accounts.length}</b>`;
 
-    // 快过期 / 已过期提醒。hatch_vml 只有约 2 天寿命，且不会因为使用而延长，
-    // 所以这里是刚需提醒，不是锦上添花。
-    const now = Math.floor(Date.now() / 1000);
-    const soon = accounts.filter(a => a.enabled && a.expires_at &&
-                                      a.expires_at - now < 12 * 3600);
-    const bar = $('expWarn');
-    if (soon.length){
-      const dead = soon.filter(a => a.expires_at <= now).length;
-      const names = soon.slice(0, 4).map(a => esc(a.label)).join('、') +
-                    (soon.length > 4 ? ` 等 ${soon.length} 个` : '');
-      $('expWarnText').innerHTML = dead
-        ? `⚠️ <b>${dead} 个账号已过期</b>，${soon.length - dead ? `另有 ${soon.length - dead} 个即将过期（${names}）` : names}。` +
-          `过期的账号无法生成，请重新登录一次（约 30 秒）。`
-        : `⏳ <b>${names}</b> 的有效期不足 12 小时。muse.ai 的会话约 2 天到期且不会因使用而延长，` +
-          `建议现在重新登录一次，避免生成时突然失败。`;
-      bar.style.display = '';
-    }else{
-      bar.style.display = 'none';
-    }
+    const soon = accounts.some(account => account.enabled && accountTimestamp(account.expires_at) && accountTimestamp(account.expires_at).getTime() - Date.now() < 12 * 3600000);
+    $('expWarn').style.display = soon ? '' : 'none';
+    $('expWarnText').textContent = soon ? t('Cookie 到期提醒不等于认证失效，请先测试会话；上游确认失效后再重新登录。') : '';
 
     if (!accounts.length){
-      $('poolBody').innerHTML = '<tr><td colspan="10" class="empty">还没有账号。去「获取 Cookie」页签按三步导入一个</td></tr>';
+      $('poolBody').innerHTML = '<div class="empty">' + esc(t('还没有账号。去「获取 Cookie」页签按三步导入一个')) + '</div>';
       return;
     }
-    $('poolBody').innerHTML = accounts.map(a => {
-      const ok = a.ok;
-      const badge = !a.enabled ? '<span class="badge mute">已禁用</span>'
-                  : ok === true  ? '<span class="badge ok">● 可用</span>'
-                  : ok === false ? '<span class="badge bad">● 异常</span>'
-                  : '<span class="badge warn">○ 未检测</span>';
-      const miss = a.essential_ok ? '' : ' <span class="badge bad" title="缺少核心 cookie，无法生成">缺核心</span>';
-      return `<tr>
-        <td><b>${esc(a.label)}</b><div class="mono ellip proxy-summary" title="${esc(a.proxy?.server || '默认网络')}">${esc(a.proxy?.server || '默认网络')}</div>${proxyStatus(a)}</td>
-        <td class="mono">${esc(a.id)}</td>
-        <td>${badge}${miss}</td>
-        <td>${expiryBadge(a)}</td>
-        <td>${quotaBadge(a)}</td>
-        <td>${a.enabled ? '<span class="badge ok">开</span>' : '<span class="badge mute">关</span>'}</td>
-        <td class="mono">${a.cookie_count}</td>
-        <td class="mono" title="${a.last_used ? fmtTime(a.last_used) : ''}">${ago(a.last_used)}</td>
-        <td class="mono ellip" title="${esc(a.note||'')}">${esc(a.note || '—')}</td>
-        <td><div class="acts">
-          <button class="ghost mini" onclick="testAcc('${a.id}')">测试</button>
-          <button class="ghost mini" onclick="keepaliveOne('${a.id}')" title="静默刷新会话令牌与有效期">保活</button>
-          <button class="ghost mini" onclick="queryQuota('${a.id}', this)">额度</button>
-          <button class="ghost mini" onclick="openProxy('${a.id}')">代理</button>
-          <button class="ghost mini" onclick="toggleAcc('${a.id}', ${!a.enabled})">${a.enabled ? '禁用' : '启用'}</button>
-          <button class="ghost mini" onclick="renameAcc('${a.id}','${esc(a.label)}')">改名</button>
-          <button class="ghost mini" onclick="updateCookies('${a.id}')">更新Cookie</button>
-          <button class="danger mini" onclick="delAcc('${a.id}','${esc(a.label)}')">删除</button>
-        </div></td>
-      </tr>`;
-    }).join('');
+    $('poolBody').innerHTML = accounts.map(accountCard).join('');
   }catch(e){
     $('poolBody').innerHTML = authOK === false
-      ? '<tr><td colspan="10" class="empty">🔑 请先在右上角填入 API Key 并点「保存」</td></tr>'
-      : `<tr><td colspan="10" class="empty">加载失败：${esc(e.message)}</td></tr>`;
+      ? '<div class="empty">' + esc(t('🔑 请先在右上角填入 API Key 并点「保存」')) + '</div>'
+      : `<div class="empty">${esc(t('加载失败：') + safeAutomationText(e.message))}</div>`;
   }
 }
 
@@ -1785,7 +2350,7 @@ async function addAccount(fromManual){
 async function testAcc(id){
   toast('正在真实打开 muse.ai 校验会话…');
   try{
-    const r = await api(`/admin/accounts/${id}/test`, {method:'POST'});
+    const r = await api(`/admin/accounts/${encodeURIComponent(id)}/test`, {method:'POST'});
     const quotaStatus = r.quota_error ? `；额度读取失败：${r.quota_error}` : r.quota ? `；额度已刷新：${r.quota.weekly_used_pct ?? '?'}%` : '';
     toast((r.ok ? '✓ ' : '✗ ') + r.message + quotaStatus, r.ok && !r.quota_error ? 'ok' : 'warn');
     loadPool();
@@ -1902,33 +2467,17 @@ $('proxyTest').addEventListener('click', testProxy);
 async function keepaliveOne(id){
   toast('正在为该账号执行会话静默续期…');
   try{
-    const r = await api(`/admin/accounts/${id}/keepalive`, {method:'POST'});
+    const r = await api(`/admin/accounts/${encodeURIComponent(id)}/keepalive`, {method:'POST'});
     toast(r.ok ? `✓ 账号保活成功，新到期时间已更新` : `✗ 保活失败: ${r.error||'未知错误'}`, r.ok ? 'ok' : 'bad');
     loadPool();
   }catch(e){ toast('保活失败：' + e.message, 'bad'); }
 }
 
-async function keepaliveAll(){
-  const btn = $('btnKeepaliveAll');
-  if (btn) { btn.disabled = true; btn.innerText = '保活执行中…'; }
-  toast('正在唤醒无头浏览器，为账号池执行静默续期与保活…', 'warn');
-  try{
-    const r = await api('/admin/accounts/keepalive?force=true', {method:'POST'});
-    if (r.status === 'busy') {
-      toast('保活任务正在后台运行中，请稍候查看', 'warn');
-    } else {
-      toast(`✓ 成功保活 ${r.refreshed_count || 0} 个账号，跳过 ${r.skipped_count || 0} 个`, 'ok');
-    }
-    loadPool();
-  }catch(e){ toast('保活执行失败：' + e.message, 'bad'); }
-  finally{
-    if (btn) { btn.disabled = false; btn.innerText = '⚡ 一键保活所有账号'; }
-  }
-}
+async function keepaliveAll(){ await runMaintenance(); }
 
 async function toggleAcc(id, enabled){
   try{
-    await api(`/admin/accounts/${id}`, {method:'PATCH', body: JSON.stringify({enabled})});
+    await api(`/admin/accounts/${encodeURIComponent(id)}`, {method:'PATCH', body: JSON.stringify({enabled})});
     toast(enabled ? '已启用' : '已禁用', 'ok'); loadPool();
   }catch(e){ toast('操作失败：' + e.message, 'bad'); }
 }
@@ -1937,7 +2486,7 @@ async function renameAcc(id, old){
   const label = prompt('新的账号标签：', old);
   if (label === null || !label.trim()) return;
   try{
-    await api(`/admin/accounts/${id}`, {method:'PATCH', body: JSON.stringify({label: label.trim()})});
+    await api(`/admin/accounts/${encodeURIComponent(id)}`, {method:'PATCH', body: JSON.stringify({label: label.trim()})});
     toast('标签已更新', 'ok'); loadPool();
   }catch(e){ toast('改名失败：' + e.message, 'bad'); }
 }
@@ -1946,7 +2495,7 @@ async function updateCookies(id){
   const v = prompt('粘贴该账号最新的 Cookie 字符串：');
   if (!v || !v.trim()) return;
   try{
-    const r = await api(`/admin/accounts/${id}/cookies`, {method:'POST', body: JSON.stringify({cookie_header: v.trim()})});
+    const r = await api(`/admin/accounts/${encodeURIComponent(id)}/cookies`, {method:'POST', body: JSON.stringify({cookie_header: v.trim()})});
     toast(`Cookie 已更新（${r.cookie_count} 条）`, 'ok'); loadPool();
   }catch(e){ toast('更新失败：' + e.message, 'bad'); }
 }
@@ -1954,41 +2503,60 @@ async function updateCookies(id){
 async function delAcc(id, label){
   if (!confirm(`确定删除账号「${label}」？此操作不可撤销。`)) return;
   try{
-    await api(`/admin/accounts/${id}`, {method:'DELETE'});
+    await api(`/admin/accounts/${encodeURIComponent(id)}`, {method:'DELETE'});
     toast('已删除', 'ok'); loadPool();
   }catch(e){ toast('删除失败：' + e.message, 'bad'); }
 }
 
 /* ================= 任务记录 ================= */
-async function loadTasks(){
+let tasksHaveWork = false;
+const TASK_TERMINAL = new Set(['succeeded','completed','failed','cancelled','canceled','interrupted']);
+function safeTaskResultURL(raw){
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  try { const url = new URL(raw,location.origin); return ['http:','https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
+  catch (error) { return ''; }
+}
+async function loadTasks(signal){
+  if (!signal) tasksPoller.reset();
   try{
-    const d = await api('/admin/tasks?limit=60');
-    const ts = d.tasks || [];
-    $('taskCount').textContent = ts.length;
-    if (!ts.length){ $('taskBody').innerHTML = '<tr><td colspan="8" class="empty">暂无任务记录</td></tr>'; return; }
-    $('taskBody').innerHTML = ts.map(t => {
-      const cls = (t.status === 'succeeded' || t.status === 'completed') ? 'ok' : t.status === 'failed' ? 'bad'
-                : t.status === 'processing' ? 'info' : 'warn';
+    const d = await automationApi('/admin/tasks?limit=60',{signal});
+    if (signal?.aborted) return;
+    const tasks = Array.isArray(d?.tasks) ? d.tasks : [];
+    tasksHaveWork = tasks.some(task => !TASK_TERMINAL.has(task.status));
+    if (!tasksHaveWork) tasksPoller.pause();
+    $('taskCount').textContent = tasks.length;
+    if (!tasks.length){ $('taskBody').innerHTML = '<tr><td colspan="8" class="empty">' + esc(t('暂无任务记录')) + '</td></tr>'; return; }
+    $('taskBody').innerHTML = tasks.map(task => {
+      const cls = ['succeeded','completed'].includes(task.status) ? 'ok' : task.status === 'failed' ? 'bad' : 'info';
+      const id = esc(task.id), url = safeTaskResultURL(task.result?.url);
       let out = '—';
-      if (t.result && t.result.url) out = `<a href="${esc(t.result.url)}" target="_blank">查看结果</a> <span class="mono">${fmtBytes(t.result.bytes)}</span>`;
-      else if (t.error) out = `<span style="color:var(--bad)">${esc(t.error).slice(0,120)}</span>`;
-      return `<tr>
-        <td class="mono">${esc(t.id)}</td>
-        <td>${t.kind === 'video' ? '<span class="badge info">视频</span>' : '<span class="badge info">图片</span>'}</td>
-        <td><span class="ellip" title="${esc(t.prompt)}">${esc(t.prompt)}</span></td>
-        <td><span class="badge ${cls}">${esc(t.status)}</span></td>
-        <td class="mono">${t.elapsed ? t.elapsed + 's' : '—'}</td>
-        <td class="mono">${fmtTime(t.created_at)}</td>
-        <td>${out}</td>
-        <td><button class="danger mini" onclick="delTask('${t.id}')">删</button></td>
-      </tr>`;
+      if (task.error) {
+        const message = safeAutomationText(typeof task.error === 'object' ? diagnosticJSON(task.error) : task.error);
+        out = '<span style="color:var(--bad)" data-no-i18n>' + esc(message.slice(0,120)) + '</span><details class="task-error"><summary>' + esc(t('错误详情')) + '</summary><pre data-no-i18n>' + esc(message) + '</pre></details>';
+      } else if (url) out = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(t('查看结果')) + '</a> <span class="mono">' + esc(fmtBytes(task.result.bytes)) + '</span>';
+      return '<tr><td class="mono" data-no-i18n>' + id + '</td>' +
+        '<td><span class="badge info">' + esc(t(task.kind === 'video' ? '视频' : '图片')) + '</span></td>' +
+        '<td><span class="ellip" data-no-i18n title="' + esc(task.prompt) + '">' + esc(task.prompt) + '</span></td>' +
+        '<td><span class="badge ' + cls + '" data-no-i18n>' + esc(task.status) + '</span></td>' +
+        '<td class="mono">' + esc(task.elapsed ? String(task.elapsed) + 's' : '—') + '</td>' +
+        '<td class="mono">' + esc(automationTime(task.created_at)) + '</td><td>' + out + '</td>' +
+        '<td><div class="acts"><button class="ghost mini" data-task-logs="' + id + '">' + esc(t('查看日志')) + '</button><button class="danger mini" data-task-delete="' + id + '">' + esc(t('删')) + '</button></div></td></tr>';
     }).join('');
-  }catch(e){
-    $('taskBody').innerHTML = `<tr><td colspan="8" class="empty">加载失败：${esc(e.message)}</td></tr>`;
+    tasksPoller.schedule();
+  }catch(error){
+    if (signal?.aborted) return;
+    $('taskBody').innerHTML = '<tr><td colspan="8" class="empty">' + esc(t('加载失败：') + safeAutomationText(error.message)) + '</td></tr>';
+    if (signal) throw error;
   }
 }
+const tasksPoller = boundedPoller(() => activeAutomationTab('tasks'),() => tasksHaveWork,loadTasks,() => toast(t('自动刷新已停止，请手动刷新状态。'),'warn'));
+$('taskBody').addEventListener('click',event => {
+  const logs = event.target.closest('button[data-task-logs]'), remove = event.target.closest('button[data-task-delete]');
+  if (logs) openTaskLogs(logs.dataset.taskLogs);
+  if (remove) void delTask(remove.dataset.taskDelete);
+});
 async function delTask(id){
-  try{ await api('/admin/tasks/' + id, {method:'DELETE'}); loadTasks(); }
+  try{ await api('/admin/tasks/' + encodeURIComponent(id), {method:'DELETE'}); loadTasks(); }
   catch(e){ toast('删除失败：' + e.message, 'bad'); }
 }
 async function clearTasks(){
@@ -2363,15 +2931,15 @@ async function loadStatus(){
   }
 }
 
-function refreshAll(){ loadStatus(); loadPool(); loadApikey(); loadRepoStatus(false); }
+function refreshAll(){ loadStatus(); loadPool(); loadApikey(); loadRepoStatus(false); loadMaintenanceSettings(); }
 
 refreshAll();
 setInterval(() => {
+  if (document.hidden) return;
   loadStatus(); loadPool();
-  if ($('tab-tasks').classList.contains('active')) loadTasks();
 }, 8000);
 setInterval(() => {
-  loadRepoStatus(false);
+  if (!document.hidden) loadRepoStatus(false);
 }, 60000);
 </script>
 </body>

@@ -11,7 +11,9 @@ from __future__ import annotations
 import base64
 import binascii
 import copy
+from functools import wraps
 import hashlib
+import inspect
 import http.client
 import ipaddress
 import mimetypes
@@ -34,6 +36,7 @@ import uuid
 import unicodedata
 
 from cdp import CDP, http_json
+from diagnostics import Journal, get_journal
 from proxy import HTTPProxyRelay, request_proxy_context
 
 log = logging.getLogger("muse2api")
@@ -304,9 +307,47 @@ def _open_public_ref_image(url: str):
     raise urllib.error.URLError("参考图重定向次数过多")
 
 
+def _diagnostic_stage(stage: str):
+    """Record stage boundaries without serializing positional args or results."""
+    def decorate(method):
+        signature = inspect.signature(method)
+
+        @wraps(method)
+        def wrapped(self, *args, **kwargs):
+            journal = getattr(self, "journal", None)
+            # Preserve __new__-based offline fixtures and callers without a sink.
+            if journal is None:
+                return method(self, *args, **kwargs)
+            bound = signature.bind_partial(self, *args, **kwargs)
+            account_id = bound.arguments.get("account_id") or self.current_acc_id
+            started = time.monotonic()
+            with journal.context(account_id=account_id):
+                self._diagnostic("engine." + stage + ".start", stage=stage)
+                try:
+                    result = method(self, *args, **kwargs)
+                except Exception as exc:
+                    error_stage = "refusal" if isinstance(exc, (MuseModelRefusalError, MuseRegionRestrictedError)) else stage
+                    reason = ("region_restricted" if isinstance(exc, MuseRegionRestrictedError)
+                              else "model_refused" if isinstance(exc, MuseModelRefusalError)
+                              else stage + "_failed")
+                    self._diagnostic("engine." + error_stage + ".failed", exc=exc,
+                                     stage=error_stage, reason=reason,
+                                     duration_ms=(time.monotonic() - started) * 1000)
+                    raise
+                self._diagnostic("engine." + stage + ".complete", stage=stage,
+                                 reason="no_result" if result is None and stage == "wait" else "completed",
+                                 duration_ms=(time.monotonic() - started) * 1000)
+                return result
+        return wrapped
+    return decorate
+
+
 class MuseEngine:
-    def __init__(self, cfg):
+    def __init__(self, cfg, journal: Journal | None = None):
         self.cfg = cfg
+        self.journal = journal
+        if self.journal is None and getattr(cfg, "data_dir", None):
+            self.journal = get_journal(os.path.join(cfg.data_dir, "diagnostics.jsonl"))
         self.proc: subprocess.Popen | None = None
         self.browser: CDP | None = None
         self._local = threading.local()
@@ -319,6 +360,28 @@ class MuseEngine:
         self._last_http_renew: dict[str, float] = {}
         self._log = None
         os.makedirs(cfg.profile_dir, exist_ok=True)
+
+    def _diagnostic(self, event: str, *, exc=None, **fields):
+        """A broken log volume must not replace the original generation result."""
+        journal = getattr(self, "journal", None)
+        if journal is None:
+            return
+        try:
+            if exc is not None:
+                journal.error(event, exc, **fields)
+            else:
+                journal.emit(event, **fields)
+        except Exception as failure:
+            # No exception message: it may contain a sensitive URL or file path.
+            log.error("Diagnostic persistence failed (%s)", type(failure).__name__)
+
+    @property
+    def last_quota_cookies(self) -> dict:
+        return getattr(self._ensure_local(), "last_quota_cookies", {})
+
+    @last_quota_cookies.setter
+    def last_quota_cookies(self, value: dict):
+        self._ensure_local().last_quota_cookies = value
 
     def _ensure_local(self):
         local = getattr(self, "_local", None)
@@ -621,7 +684,9 @@ class MuseEngine:
                             f"经账号代理唤醒或确认 VM 失败 ({type(exc).__name__})；未回退直连") from None
                 except Exception:
                     pass
+            from account_identity import identity_from_session
             return {
+                "identity": identity_from_session(sj),
                 "ok": sj.get("status") == "assigned",
                 "status": sj.get("status"),
                 "vm_id": vm_id,
@@ -752,6 +817,7 @@ class MuseEngine:
         except Exception:
             pass
 
+    @_diagnostic_stage("session")
     def ensure_page(self, cookies: dict, expires: dict | None = None, account_id: str | None = None):
         resolver = getattr(self, "proxy_resolver", None)
         local = self._ensure_local()
@@ -786,7 +852,9 @@ class MuseEngine:
             except (MuseAuthError, MuseProxyError):
                 raise
             except Exception as e:
-                log.warning("预续签 /api/session 失败（继续尝试浏览器加载）: %s", e)
+                self._diagnostic("engine.session.prerenew_failed", exc=e, stage="session",
+                                 reason="http_renew_failed_browser_fallback")
+                log.warning("预续签 /api/session 失败（继续尝试浏览器加载）: %s", type(e).__name__)
 
         page = self._open_page(proxy=proxy) if proxy else self._open_page()
         self.page = page  # Cleanup must also own pages that never become ready.
@@ -894,12 +962,14 @@ class MuseEngine:
                                 'windowsVirtualKeyCode': 27, 'nativeVirtualKeyCode': 27})
             time.sleep(0.1)  # Let the UI finish closing before the next interaction.
 
+    @_diagnostic_stage("quota")
     def quota(self, cookies: dict, expires: dict | None = None,
               account_id: str | None = None) -> dict:
         """Read one account's quota in a fresh, disposable browser context."""
         # Muse's Settings menu can remain in a half-closed React state after a read.
         # A disposable context is slower, but prevents consecutive reads from
         # inheriting stale UI and keeps account cookies strictly isolated.
+        self.last_quota_cookies = {}
         self._close_page()
         try:
             self.ensure_page(cookies, expires, account_id=account_id)
@@ -909,6 +979,11 @@ class MuseEngine:
             while True:
                 parsed = self._parse_quota(self.page.js(self._QUOTA_DIALOG_JS) or '')
                 if parsed['found']:
+                    try:
+                        self.last_quota_cookies = self.read_cookies()
+                    except Exception:
+                        # A UI-only/mocked page may not implement Network.getCookies.
+                        self.last_quota_cookies = {}
                     return parsed
                 if time.monotonic() >= deadline:
                     raise MuseGenerationError('额度面板未读到有效用量；旧缓存未覆盖')
@@ -1071,6 +1146,7 @@ class MuseEngine:
         "b.click();return 'clicked';})()"
     )
 
+    @_diagnostic_stage("send")
     def _send(self, prompt: str):
         # 1. 确保 textarea 滚动到视口中央并获得真实焦点
         try:
@@ -1085,12 +1161,16 @@ class MuseEngine:
             pass
         time.sleep(0.1)
 
+        input_started = time.monotonic()
+        self._diagnostic("engine.input.start", stage="input")
         rect = self.page.js(
             "(function(){var t=document.querySelector('textarea');if(!t)return null;"
             "var r=t.getBoundingClientRect();"
             "return JSON.stringify({x:Math.round(r.left+r.width/2),"
             "y:Math.round(r.top+r.height/2)});})()")
         if not rect:
+            self._diagnostic("engine.input.missing", level="warning", stage="input",
+                             reason="composer_not_found")
             raise MuseGenerationError("找不到聊天输入框")
         c = json.loads(rect)
         for t in ("mousePressed", "mouseReleased"):
@@ -1115,6 +1195,9 @@ class MuseEngine:
             self.page.send("Input.insertText", {"text": prompt})
             self.page.js(_SETTER_JS % json.dumps(prompt))
 
+        self._diagnostic("engine.input.complete", stage="input",
+                         reason="text_inserted" if val_len else "fallback_insert_attempted",
+                         duration_ms=(time.monotonic() - input_started) * 1000)
         # 等待发送按钮就绪并点击
         clicked = "no-button"
         t_deadline = time.time() + 3.0
@@ -1144,6 +1227,9 @@ class MuseEngine:
                 except Exception:
                     pass
         time.sleep(0.3)
+        self._diagnostic("engine.send.state", stage="send",
+                         send_state=clicked if clicked in ("clicked", "enter-sent") else "unconfirmed",
+                         reason="click_not_delivery_confirmation")
         return clicked
 
     def _composer_unsent(self) -> str:
@@ -1285,6 +1371,11 @@ class MuseEngine:
             if previous_state is None or state != previous_state:
                 last_activity = time.time()
                 previous_state = state
+                # Never include cur_txt, tail, URLs or prompt/body text.
+                if getattr(self, "journal", None) is not None:
+                    self._diagnostic("engine.wait.state", stage="wait", agent_count=cur_cnt,
+                                     attachment_count=len(atts), stop_visible=has_stop,
+                                     duration_ms=elapsed * 1000)
 
             if on_progress:
                 milestone = 25 if seen_stop else 20
@@ -1304,11 +1395,19 @@ class MuseEngine:
                 if unsent and not resent:
                     resent = True
                     log.warning("提示词发出 %.0f 秒后仍在输入框（%s），补点一次发送", elapsed, unsent)
-                    self._click_send()
+                    retry_state = self._click_send()
+                    if getattr(self, "journal", None) is not None:
+                        self._diagnostic("engine.send.retry", level="warning", stage="send",
+                                         reason="composer_not_cleared", retry=1,
+                                         send_state=retry_state if retry_state in ("clicked", "disabled", "no-button") else "error",
+                                         duration_ms=elapsed * 1000)
                 elif unsent and elapsed > 60.0:
                     raise MuseGenerationError("提示词没有发出去（%s 仍在输入框里），终止等待并换号重试" % unsent)
 
             if re.search(r"额度不足|积分不足|out of credits|达到上限|token limit", tail, re.I):
+                if getattr(self, "journal", None) is not None:
+                    self._diagnostic("engine.wait.quota_exhausted", level="warning", stage="wait",
+                                     reason="account_quota_exhausted", duration_ms=elapsed * 1000)
                 raise MuseGenerationError("账号额度不足")
             # A Stop button is also shown for messages never acknowledged by the gateway.
             if elapsed > 30.0 and cur_cnt == base_agent_cnt and re.search(
@@ -1361,7 +1460,15 @@ class MuseEngine:
                     and elapsed >= 180.0 and time.time() - last_activity >= 90.0):
                 raise MuseGenerationError(
                     "Muse 未建立视频任务线程，页面在提交结束后持续无响应（已提前停止等待）")
+        if getattr(self, "journal", None) is not None:
+            self._diagnostic("engine.wait.timeout", level="warning", stage="wait",
+                             reason="attachment_deadline_exceeded",
+                             duration_ms=(time.time() - t_start) * 1000)
         return None
+
+    # Keep the underlying waiter AST-extractable for the historical no-import
+    # media-delivery regression fixtures, while production calls are instrumented.
+    _wait_attachment = _diagnostic_stage("wait")(_wait_attachment)
 
     @staticmethod
     def _clean_model_text(text: str, limit: int = 240) -> str:
@@ -1621,6 +1728,7 @@ class MuseEngine:
             out += chunk
         return out
 
+    @_diagnostic_stage("extract")
     def extract_bytes(self, src: str, expect: str = "image", retries: int = 4,
                       deadline: float | None = None):
         """把页面里的媒体取回字节。deadline 用 time.monotonic()。
@@ -1629,21 +1737,31 @@ class MuseEngine:
         视频体价比图片大得多，必须跟着任务 deadline 收口。
         """
         last = "未知"
-        for _ in range(retries):
+        for extract_attempt in range(1, retries + 1):
+            self._diagnostic("engine.extract.attempt", stage="extract", retry=extract_attempt)
             remaining = 600.0 if deadline is None else max(10.0, deadline - time.monotonic())
             raw = self.page.js(self._EXTRACT_JS % (json.dumps(src), json.dumps(expect)),
                                await_promise=True, timeout=min(600.0, remaining))
             try:
                 info = json.loads(raw) if isinstance(raw, str) else raw
             except Exception:  # noqa: BLE001
-                info = {"ok": False, "err": f"解析失败 {str(raw)[:150]}"}
+                info = {"ok": False, "err": "media_result_parse_failed"}
             if info.get("ok"):
-                return base64.b64decode(info["b64"]), info.get("mime", ""), info.get("url", "")
-            last = info.get("err", "未知")
+                decoded = base64.b64decode(info["b64"])
+                self._diagnostic("engine.extract.received", stage="extract", retry=extract_attempt,
+                                 byte_count=len(decoded))
+                return decoded, info.get("mime", ""), info.get("url", "")
+            reported = info.get("err", "")
+            last = (reported if isinstance(reported, str) and
+                    re.fullmatch(r"no-media-src|media-http-[1-5][0-9]{2}|media_result_parse_failed", reported)
+                    else "media_fetch_failed")
+            self._diagnostic("engine.extract.retry", level="warning", stage="extract",
+                             reason=last, retry=extract_attempt)
             time.sleep(2)
         raise MuseGenerationError(f"未能取回生成结果: {last}")
 
     # ---------------- 下载兜底 ----------------
+    @_diagnostic_stage("download")
     def _download_fallback(self, src: str, timeout: float = 180,
                            deadline: float | None = None) -> str | None:
         directory = self.download_dir
@@ -1830,6 +1948,7 @@ class MuseEngine:
         return 0;
     })()"""
 
+    @_diagnostic_stage("upload_input")
     def _set_input_files(self, paths: list[str], timeout: float = 20.0):
         """用 CDP 直接把磁盘文件交给上传控件（大视频不再经 base64 注入页面）。
 
@@ -1851,6 +1970,7 @@ class MuseEngine:
                 raise MuseGenerationError("找不到上传控件，已停止生成")
             time.sleep(0.25)
 
+    @_diagnostic_stage("upload")
     def _attach_images(self, image_data: list[str],
                        deadline: float | None = None) -> dict | None:
         """逐个附加参考素材（图片/视频/音频/文档），并确认全部进入输入框。
@@ -1859,6 +1979,7 @@ class MuseEngine:
         删除临时目录（Chromium 在发送时才读取文件内容），并用 hashes 防止把
         刚上传的素材当成生成结果交付。
         """
+        self._diagnostic("engine.upload.count", stage="upload", expected_count=len(image_data))
         if len(image_data) > MAX_REFERENCE_IMAGES:
             raise MuseGenerationError(f"参考素材最多 {MAX_REFERENCE_IMAGES} 个")
         files = []
@@ -1927,6 +2048,7 @@ class MuseEngine:
             time.sleep(0.3)
         return self._attached_count() >= target
 
+    @_diagnostic_stage("upload_files")
     def _upload_references(self, paths: list[str], deadline: float | None = None):
         """逐个投喂参考素材，并且「确认这一张真的进了输入框」再投下一张。"""
         budget = self._UPLOAD_TOTAL_BUDGET
@@ -1935,6 +2057,7 @@ class MuseEngine:
             budget = min(budget, max(45.0, deadline - time.monotonic()))
         upload_deadline = time.monotonic() + budget
         pending = list(paths)
+        self._diagnostic("engine.upload_files.count", stage="upload", expected_count=len(paths))
         for _round in range(self._UPLOAD_ROUNDS):
             if not pending or time.monotonic() >= upload_deadline:
                 break
@@ -1950,10 +2073,18 @@ class MuseEngine:
                     upload_deadline, time.monotonic() + self._UPLOAD_PER_FILE_TIMEOUT)
                 if self._wait_attached_count(before + 1, per_file_deadline):
                     pending.remove(path)
+                    self._diagnostic("engine.upload.confirmed", stage="upload", retry=_round + 1,
+                                     confirmed_count=before + 1, expected_count=len(paths))
                 else:
-                    log.warning("参考素材未被输入框接收，准备补投: %s", os.path.basename(path))
+                    self._diagnostic("engine.upload.retry", level="warning", stage="upload",
+                                     reason="composer_attachment_count_unchanged", retry=_round + 1,
+                                     confirmed_count=self._attached_count(), expected_count=len(paths))
+                    log.warning("参考素材未被输入框接收，准备补投（第 %d 轮）", _round + 1)
         attached = self._attached_count()
         if pending and attached < len(paths):
+            self._diagnostic("engine.upload.unconfirmed", level="warning", stage="upload",
+                             reason="upload_count_mismatch", confirmed_count=attached,
+                             expected_count=len(paths))
             raise MuseGenerationError(
                 f"参考素材上传未确认（{attached}/{len(paths)}），已停止生成")
 
@@ -1961,6 +2092,7 @@ class MuseEngine:
         """Backward-compatible single-reference wrapper."""
         self._attach_images([image_data])
     # ---------------- 主流程 ----------------
+    @_diagnostic_stage("generation")
     def generate(self, cookies: dict, prompt: str, expect: str = "image",
                  timeout: int = 240, expires: dict | None = None, account_id: str | None = None,
                  on_progress=None, reference_image: str | None = None,
@@ -1971,6 +2103,7 @@ class MuseEngine:
         self.reset_thread(for_chat=False)
         self._scroll_bottom()
         refs = list(reference_images or ([] if not reference_image else [reference_image]))
+        self._diagnostic("engine.generation.references", stage="upload", reference_count=len(refs))
         upload = self._attach_images(refs, deadline=deadline) if refs else None
         if not refs:
             self._clear_attachments()
@@ -1988,6 +2121,8 @@ class MuseEngine:
         base = atts_before[-1] if atts_before else {}
         baseline_src = base.get("src") or ""
         base_agent_cnt = self._agent_count()
+        self._diagnostic("engine.generation.baseline", stage="wait",
+                         attachment_count=len(atts_before), agent_count=base_agent_cnt)
         if time.monotonic() >= deadline:
             raise MuseGenerationError("任务准备超时，已停止发送")
         if self._send(prompt) not in ("clicked", "enter-sent"):
@@ -2018,7 +2153,9 @@ class MuseEngine:
                 self._debug_dump("extract-fail")
 
             if data and hashlib.sha256(data).hexdigest() in upload_hashes:
-                log.warning("命中的附件是本次上传的参考素材，忽略并继续等待: %s", selected_src[:80])
+                self._diagnostic("engine.extract.reference_rejected", level="warning",
+                                 stage="extract", reason="uploaded_reference_not_result")
+                log.warning("命中的附件是本次上传的参考素材，忽略并继续等待")
                 baseline_sources |= {att.get(k) for k in ("src", "vSrc", "iSrc") if att.get(k)}
                 time.sleep(0.1)
                 continue
@@ -2044,6 +2181,8 @@ class MuseEngine:
                 digest = hashlib.sha256(f.read()).hexdigest()
             if digest in upload_hashes:
                 os.remove(path)
+                self._diagnostic("engine.extract.reference_rejected", level="warning",
+                                 stage="download", reason="uploaded_reference_not_result")
                 log.warning("下载到的文件是本次上传的参考素材，忽略并继续等待")
                 baseline_sources |= {att.get(k) for k in ("src", "vSrc", "iSrc") if att.get(k)}
                 time.sleep(0.1)
@@ -2074,20 +2213,49 @@ class MuseEngine:
                 return e
         return ".mp4" if expect == "video" else ".png"
 
+    _SAFE_DEBUG_JS = (
+        "(function(){var ta=document.querySelector('textarea');var b=" + _SEND_BUTTON_JS + ";"
+        "return JSON.stringify({ready_state:document.readyState,"
+        "attachment_count:document.querySelectorAll('" + ATT_SEL + "').length,"
+        "composer_present:!!ta,composer_has_text:!!(ta && ta.value),"
+        "composer_disabled:!!(ta && ta.disabled),"
+        "send_state:b?(" + _SEND_DISABLED_JS + "?'disabled':'enabled'):'missing',"
+        "stop_visible:!!document.querySelector('[data-testid=hatch-composer-stop-button]')});})()"
+    )
+
     def _debug_dump(self, tag: str):
+        """Save only typed UI state, never page text, labels, sources or cookies."""
+        safe_tag = tag if tag in ("no-attachment", "extract-fail") else "state"
         try:
-            info = self.page.js(
-                "JSON.stringify({atts:[...document.querySelectorAll('" + ATT_SEL + "')]"
-                ".map(function(a){var m=a.querySelector('img,video');return {"
-                "tid:a.getAttribute('data-testid'),"
-                "src:m?(m.currentSrc||m.src||'').slice(0,60):''};}),"
-                "buttons:[...document.querySelectorAll('button,[role=button]')]"
-                ".filter(b=>b.offsetParent!==null)"
-                ".map(b=>b.getAttribute('aria-label')||b.innerText.trim().slice(0,20))"
-                ".filter(Boolean).slice(-40),"
-                "tail:document.body.innerText.slice(-500)})")
-            with open(os.path.join(self.cfg.data_dir, f"debug-{tag}.json"), "w",
-                      encoding="utf-8") as f:
-                f.write(str(info))
-        except Exception:  # noqa: BLE001
-            pass
+            raw = self.page.js(self._SAFE_DEBUG_JS)
+            incoming = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(incoming, dict):
+                incoming = {}
+            state = {}
+            for key in ("composer_present", "composer_has_text", "composer_disabled", "stop_visible"):
+                if type(incoming.get(key)) is bool:
+                    state[key] = incoming[key]
+            count = incoming.get("attachment_count")
+            if type(count) is int and 0 <= count <= 100000:
+                state["attachment_count"] = count
+            ready = incoming.get("ready_state")
+            if ready in ("loading", "interactive", "complete"):
+                state["ready_state"] = ready
+            send = incoming.get("send_state")
+            if send in ("missing", "disabled", "enabled"):
+                state["send_state"] = send
+            self._diagnostic("engine.debug.state", stage="debug", reason=safe_tag, state=state)
+            # Fixed set of filenames, bounded state, owner-only mode and atomic replacement.
+            os.makedirs(self.cfg.data_dir, exist_ok=True)
+            fd, temporary = tempfile.mkstemp(prefix=".debug-", suffix=".json", dir=self.cfg.data_dir)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    json.dump(state, stream, ensure_ascii=False, allow_nan=False)
+                os.replace(temporary, os.path.join(self.cfg.data_dir, f"debug-{safe_tag}.json"))
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            return state
+        except Exception as exc:  # noqa: BLE001
+            self._diagnostic("engine.debug.failed", exc=exc, stage="debug", reason="state_capture_failed")
+            return None

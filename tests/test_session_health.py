@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -24,7 +25,9 @@ def check(root, home, observe):
             assert condition, message
 
     def account(prior=True, expiry=True):
-        a = app.store.add_account({'hatch_sess': 'fixture'}, cookies_exp={'hatch_vml': 1900012345} if expiry else {})
+        # Each probe case is a different synthetic account; identical session imports now dedupe.
+        a = app.store.add_account({'hatch_sess': 'fixture-' + uuid.uuid4().hex},
+                                  cookies_exp={'hatch_vml': 1900012345} if expiry else {})
         a.update(ok=prior, last_keepalive=1899999900, synced_at=1899999900)
         return a
 
@@ -34,7 +37,7 @@ def check(root, home, observe):
                 raise body
             return body
         jar = requests.cookies.RequestsCookieJar()
-        jar.set('hatch_sess', 'renewed-fixture', expires=1900020000)
+        jar.set('hatch_sess', 'renewed-fixture-' + uuid.uuid4().hex, expires=1900020000)
         return SimpleNamespace(status_code=code, json=decode, cookies=jar)
 
     cases = [('401', response(401)), ('403', response(403)), ('429', response(429)),
@@ -50,6 +53,8 @@ def check(root, home, observe):
             before = copy.deepcopy(a)
             with patch('requests.get', side_effect=reply if isinstance(reply, Exception) else None, return_value=reply) as get:
                 result = app._probe_account_sync(a['id'])
+            # A verified renewal may merge duplicate synthetic sessions; resolve the alias.
+            a = app.store.get_account(a['id'])
             expected_ok = True if name == 'assigned' else False if name == '401' else prior
             expect(a['ok'] is expected_ok, f'{name}: account state changed incorrectly')
             expect(result['ok'] is (name == 'assigned'), f'{name}: wrong probe result')
@@ -57,7 +62,7 @@ def check(root, home, observe):
             if name != 'assigned':
                 expect(all(a[k] == before[k] for k in protected), f'{name}: modified protected session data')
             else:
-                expect(a['cookies']['hatch_sess'] == 'renewed-fixture', 'renewed cookie not saved')
+                expect(a['cookies']['hatch_sess'].startswith('renewed-fixture-'), 'renewed cookie not saved')
                 expect(a['last_keepalive'] == 1900000000, 'successful keepalive not recorded')
                 expect(a['expires_at'] == 1900012345, 'expiry fabricated on success')
             if name in ('401', '403', '429', '503'):
