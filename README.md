@@ -10,6 +10,31 @@
 
 将 **[muse.ai](https://muse.ai/)** 网页端的前沿多模态能力逆向工程封装为标准的 **OpenAI 兼容 RESTful API**。通过无头浏览器 CDP 协议穿透、热备 WebSocket 隧道复用与动态 Session 管理，原生支持文本对话（2~3 秒级流式首字响应）、文生图、图生图编辑、文生视频、首帧图生视频，并提供多账号池亲和轮转、全自动 48 小时会话续期与云端 VM 唤醒保活，以及配套 Chrome 一键导号扩展。
 
+> ### 📌 来源说明 / Project Origin
+> 
+> **本仓库是二次开发版本（fork），并非原创项目。**
+> 
+> 原始项目：[czg86389-hub/muse2api](https://github.com/czg86389-hub/muse2api)（作者 **MUSE2API Authors**，MIT License）。
+> 本仓库在原作者代码的基础上继续维护与修复，**保留原始版权声明与 MIT 许可证**，并向所有上游贡献者致谢。CDP 穿透、账号池轮转、会话保活、扩展导号等核心设计与实现均来自上游。
+> 
+> 如果你只需要未经改动的稳定版本，请优先使用上游仓库并给原作者点 Star：<https://github.com/czg86389-hub/muse2api>
+> 
+> 本仓库（[wxxz975/muse2api](https://github.com/wxxz975/muse2api)）由我们自行维护，与原仓库及原作者没有隶属或背书关系；上游的更新我们会按需合并，问题反馈请提到本仓库的 Issues。
+> 
+> **This repository is a fork, not the original project.** Upstream: [czg86389-hub/muse2api](https://github.com/czg86389-hub/muse2api) by *MUSE2API Authors* (MIT). We keep the original copyright notice and MIT license, credit all upstream contributors, and maintain our own fixes on top. We are not affiliated with, nor endorsed by, the original author.
+
+<details>
+<summary>📝 本仓库相对上游（v1.6.10）的改动 / What this fork changes</summary>
+
+- **视频 · 多素材上传**：逐张确认进入输入框后再投下一张，<code>input[type=file]</code> 被 React 重建时轮询等待，被静默吞掉的素材自动补投。线上出现过的「参考素材上传未确认（3/4、2/4）」与「找不到上传控件」不再中断任务。
+- **视频 · 判定**：渲染期的「正在生成 / 正在渲染 / 请稍候」不再被当作模型拒绝（此前稳定 9 秒即失败）。
+- **视频 · 地区限制**：改为账号级失败，自动换号并把该账号标记异常，而不是整单终止。
+- **视频接口**：<code>duration</code> 限定 1~30s、<code>timeout</code> 限定 1~600s，支持 <code>Idempotency-Key</code> 去重，排队上限 <code>MUSE2API_VIDEO_QUEUE</code>（默认 8）超出返回 429；<code>GET /v1/videos/{id}</code> 只接受视频任务。
+- **并发与超时**：对话侧等待浏览器并发槽加超时（长视频任务不再挂住对话）；成品取回跟随任务 deadline。
+- **管理页**：视频轮询失败/超时后恢复按钮；扩展下载走 <code>/admin/extension</code>；工作区有未提交改动时跳过静默自动升级。
+
+</details>
+
 ---
 
 ## 🎬 推荐：COOL AI — 电商 AI 视频与图片一站式创作
@@ -82,7 +107,7 @@ Upload one product photo and get talking-head sales videos, story-style ad short
 
 1. **克隆代码并进入目录**：
    ```bash
-   git clone https://github.com/czg86389-hub/muse2api.git
+   git clone https://github.com/wxxz975/muse2api.git
    cd muse2api
    ```
 
@@ -148,7 +173,7 @@ Upload one product photo and get talking-head sales videos, story-style ad short
 
 > **v1.6.6 用户请务必手动升级插件：Chrome/Edge 扩展最低 1.0.2，油猴脚本最低 1.1.2。**
 > 服务端更新不会自动替换已加载的扩展。下载本 Release 的 ZIP，覆盖原扩展目录文件，在 chrome://extensions / edge://extensions 点击“重新加载”；不同个人资料分别升级。弹窗标题旁应显示 **v1.0.2**。
-> [下载扩展 1.0.2](https://github.com/czg86389-hub/muse2api/releases/download/v1.6.6/muse2api-chrome-extension-v1.6.6.zip)。只有 hatch_sess 是导入必要项；hatch_vml 和 hatch_gw 缺失不能据此判定未登录。重新导入后再点击账号“测试”。
+> [下载扩展 1.0.2](/admin/extension)（由本服务按当前代码实时打包，也可在管理面板点“下载扩展”）。只有 hatch_sess 是导入必要项；hatch_vml 和 hatch_gw 缺失不能据此判定未登录。重新导入后再点击账号“测试”。
 >
 > **Manual extension upgrade required:** extension 1.0.2+ / userscript 1.1.2+. A server update does not upgrade unpacked extensions. Replace files in the original folder and click Reload, separately for every browser profile.
 
@@ -165,7 +190,7 @@ Upload one product photo and get talking-head sales videos, story-style ad short
 ### 方式 B：Tampermonkey 油猴脚本（跨浏览器免安装扩展）
 对于不想开启开发者模式或使用 Firefox / Safari 的用户，推荐直接使用油猴脚本一键安装：
 
-👉 **[⚡ 点击一键安装油猴脚本 (Raw UserJS)](https://raw.githubusercontent.com/czg86389-hub/muse2api/main/tools/muse2api_cookie_importer.user.js)**
+👉 **[⚡ 点击一键安装油猴脚本 (Raw UserJS)](https://raw.githubusercontent.com/wxxz975/muse2api/main/tools/muse2api_cookie_importer.user.js)**
 
 1. 在浏览器安装 [Tampermonkey](https://www.tampermonkey.net/) 插件。
 2. 点击上方 **「⚡ 点击一键安装油猴脚本」** 链接，Tampermonkey 将自动弹出安装窗口，点击「安装」即可（无需手动复制粘贴代码）。

@@ -8,7 +8,9 @@ assert m['version'] in '\n'.join(v['highlights']) and m['version'] in '\n'.join(
 assert '手动' in '\n'.join(v['highlights']) and 'every browser profile' in '\n'.join(v['highlights_en'])
 html=(root/'admin.html').read_text()
 assert 'id="extensionUpgradeNotice"' in html and '"extension-upgrade-notice":' in html
-assert f"releases/download/v{v['version']}/muse2api-chrome-extension-v{v['version']}.zip" in html
+# 扩展下载改走本服务自带的 /admin/extension（随代码打包，不依赖 GitHub Release 资产）
+assert 'href="/admin/extension" download="muse2api-chrome-extension.zip"' in html
+assert 'href=\"/admin/extension\" download=\"muse2api-chrome-extension.zip\"' in html
 assert 'id="extensionVersion"' in (root/'extension/popup.html').read_text()
 assert '@version      1.1.2' in (root/'tools/muse2api_cookie_importer.user.js').read_text()
 print('PASS: bilingual upgrade notice, version badge, release instructions and download link')

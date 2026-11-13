@@ -6,8 +6,8 @@
 // @author       MUSE2API Contributors
 // @match        https://muse.ai/*
 // @match        https://*.muse.ai/*
-// @updateURL    https://raw.githubusercontent.com/czg86389-hub/muse2api/main/tools/muse2api_cookie_importer.user.js
-// @downloadURL  https://raw.githubusercontent.com/czg86389-hub/muse2api/main/tools/muse2api_cookie_importer.user.js
+// @updateURL    https://raw.githubusercontent.com/wxxz975/muse2api/main/tools/muse2api_cookie_importer.user.js
+// @downloadURL  https://raw.githubusercontent.com/wxxz975/muse2api/main/tools/muse2api_cookie_importer.user.js
 // @grant        GM_cookie
 // @grant        GM_setClipboard
 // @grant        GM_xmlhttpRequest

@@ -1,7 +1,7 @@
 {
   "version": "1.6.10",
   "updated_at": "2026-11-11",
-  "repo": "https://github.com/czg86389-hub/muse2api",
+  "repo": "https://github.com/wxxz975/muse2api",
   "highlights": [
     "修复发送按钮误匹配侧栏历史、Send feedback 或 Resend 的问题，避免参考图和长提示词留在输入框未提交。",
     "首次发送、重试和发送状态检查统一定位当前输入区域，识别中英文标签、disabled、aria-disabled 和 inert 状态。",
