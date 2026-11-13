@@ -2559,7 +2559,7 @@ async def _run_maintenance(force: bool, with_quota: bool) -> dict:
         results, skipped = [], []
         try:
             for account in store.list_accounts():
-                include_disabled = settings.include_disabled or getattr(CFG, "keepalive_disabled_accounts", False)
+                include_disabled = settings.include_disabled
                 if not include_disabled and not account.get("enabled", True):
                     continue
                 aid = account["id"]
