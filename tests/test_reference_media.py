@@ -177,7 +177,7 @@ with tempfile.TemporaryDirectory() as home:
         return next(hits)
 
     guard._wait_attachment = fake_wait
-    guard.extract_bytes = lambda src, expect: (
+    guard.extract_bytes = lambda src, expect, **kwargs: (
         upload_bytes if src == "blob:upload" else result_bytes, "video/mp4", src)
     res = guard._generate_attached("x", "video", float("inf"), None, None,
                                    {hashlib.sha256(upload_bytes).hexdigest()})

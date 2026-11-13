@@ -52,7 +52,8 @@ from config import CFG
 from engine import (ESSENTIAL_COOKIES, MAX_REFERENCE_IMAGE_BYTES,
                     MAX_REFERENCE_IMAGES, MAX_REFERENCE_TOTAL_BYTES,
                     REFERENCE_MIME_EXT, MuseAuthError, MuseEngine, MuseGenerationError,
-                    MuseModelRefusalError, RefImageSafetyError, reference_kind)
+                    MuseModelRefusalError, MuseRegionRestrictedError,
+                    RefImageSafetyError, reference_kind)
 from engine import MuseProxyError
 from store import Store, account_expiry, min_expiry
 from proxy import normalize_server, request_proxy_context, split_proxy_url
@@ -414,7 +415,12 @@ def safe_chat_stream(cookies: dict, prompt: str, expires: dict | None,
                         if refreshed:
                             cur_cookies = refreshed["cookies"]
                             cur_exp = refreshed.get("cookies_exp")
-                    with GEN_LOCK:
+                    # 必须带超时：图像/视频路径是「先拿浏览器槽、再等账号」，
+                    # 对话路径是「先拿账号、再等槽」。视频单任务最长 10 分钟，
+                    # 对话在这里无超时地等槽会把请求无限期挂住（超过 chat_timeout）。
+                    if not GEN_LOCK.acquire(timeout=max(1, timeout)):
+                        raise MuseGenerationError("等待浏览器并发槽超时，请稍后重试")
+                    try:
                         if stop_event.is_set():
                             return
                         engine.start()
@@ -426,6 +432,8 @@ def safe_chat_stream(cookies: dict, prompt: str, expires: dict | None,
                             q.put(("data", chunk))
                             if stop_event.is_set():
                                 return
+                    finally:
+                        GEN_LOCK.release()
                     if cur_id:
                         store.mark(cur_id, True, "")
                         _sync_cookies(cur_id)
@@ -490,11 +498,13 @@ class ImageRequest(BaseModel):
 class VideoRequest(BaseModel):
     prompt: str
     model: str = "muse-video"
-    duration: int | None = None
+    # 视频单次要消耗账号额度，脏参数（0/负数/超大值）会直接被写进提示词。
+    # 与 ImageRequest 对齐：时长 1~30 秒，单次任务 ~10 分钟。
+    duration: int | None = Field(default=None, ge=1, le=30)
     size: str | None = None
     aspect_ratio: str | None = None
     resolution: str | None = None
-    timeout: int | None = None
+    timeout: int | None = Field(default=None, ge=1, le=600)
     extra: str | None = None
     image: Any = None
     images: list | None = None
@@ -942,7 +952,9 @@ def build_video_prompt(r: VideoRequest, kinds: list[str] | None = None) -> str:
     user_prompt = r.prompt.strip()
     ar = (r.aspect_ratio or "").strip().lower()
     sz = (r.size or "").strip().lower()
-    dur = r.duration or 6
+    # 兜底 clamp：请求模型已限制 1~30，这里再挡一次，避免绕过校验的调用方
+    # 把「时长严格为 -3 秒」这类自相矛盾的提示词发给模型（模型会因此拒绝）。
+    dur = min(30, max(1, r.duration or 6))
     refs = _video_references(r)
     has_ref = bool(refs)
     kinds = kinds or ["image"] * len(refs)
@@ -1176,6 +1188,17 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                 last_exc = exc
                 store.touch_keepalive(cur_acc["id"], None, f"代理异常: {str(exc)[:160]}")
                 engine.close_current_page()
+            except MuseRegionRestrictedError as exc:
+                # 地区限制是账号级限制（线上日志：同一账号反复出现「这个账号
+                # 所在的国家或地区不支持视频生成」）。标成异常并换号，而不是
+                # 像内容拒绝那样直接终止。
+                last_exc = exc
+                store.mark(cur_acc["id"], False,
+                           f"该账号地区不支持视频生成: {str(exc)[:120]}")
+                try:
+                    engine.reset_thread()
+                except Exception:
+                    pass
             except MuseGenerationError as exc:
                 last_exc = exc
                 store.mark(cur_acc["id"], True, f"任务异常: {str(exc)[:60]}")
@@ -1450,16 +1473,44 @@ async def images_edits(request: Request, _=Depends(auth)):
 # ------------------------- 生视频（异步任务） -------------------------
 @app.post("/v1/videos")
 @app.post("/v1/videos/generations")
-async def create_video(req: VideoRequest, _=Depends(auth)):
+async def create_video(req: VideoRequest,
+                       idempotency_key: str | None = Header(default=None),
+                       _=Depends(auth)):
     ref_images = await asyncio.to_thread(
         _prepare_reference_images, _video_references(req))
 
     prompt = build_video_prompt(req, _reference_kinds(ref_images))
     timeout = req.timeout or CFG.video_timeout
-    task = store.create_task("video", req.prompt)
-    store.update_task(task["id"], api_prompt=prompt)
+    if idempotency_key and len(idempotency_key) > 256:
+        raise HTTPException(400, "Idempotency-Key too long")
+    key_hash = hashlib.sha256(idempotency_key.encode()).hexdigest() if idempotency_key else None
+    request_hash = hashlib.sha256(json.dumps(
+        {"request": req.model_dump(by_alias=True), "references": ref_images},
+        sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
-    store.update_task(task["id"], progress=10)
+    # 视频是最贵的任务（单个最长 10 分钟，还共用 chat/image 的浏览器并发槽），
+    # 所以和图片一样做「幂等去重 + 准入上限」，否则客户端超时重试会直接翻倍
+    # 烧额度，并发打满后连对话/生图都排不进去。
+    with IMAGE_TASK_LOCK:
+        tasks = list(store.tasks.values())
+        if key_hash:
+            for existing in tasks:
+                if existing.get("video_request_key") == key_hash:
+                    if existing.get("video_request_hash") != request_hash:
+                        raise HTTPException(409, "Idempotency-Key reused with different request")
+                    return {"id": existing["id"], "task_id": existing["id"],
+                            "object": "video.task", "status": existing.get("status"),
+                            "progress": existing.get("progress", 0),
+                            "created_at": existing["created_at"]}
+        active = sum(1 for t in tasks
+                     if t.get("kind") == "video"
+                     and t.get("status") in ("queued", "processing"))
+        if active >= CFG.video_queue:
+            raise HTTPException(429, "Video queue is full; retry later")
+        task = store.create_task("video", req.prompt)
+        store.update_task(task["id"], api_prompt=prompt, duration=req.duration,
+                          size=req.size, progress=10,
+                          video_request_key=key_hash, video_request_hash=request_hash)
 
     def worker():
         timing = {"t0": time.time()}
@@ -1492,8 +1543,10 @@ async def create_video(req: VideoRequest, _=Depends(auth)):
 @app.get("/v1/videos/generations/{task_id}")
 def get_video(task_id: str, _=Depends(auth)):
     t = store.get_task(task_id)
-    if not t:
-        raise HTTPException(404, "task 不存在")
+    # 和 /v1/images/tasks/{id} 对齐：不允许拿图片/对话任务 ID 来查视频任务，
+    # 否则会返回一个 completed 但没有 video 字段的“成功”任务。
+    if not t or t.get("kind") != "video":
+        raise HTTPException(404, "video task 不存在")
     out = dict(t)
     status = out.get("status")
     if status in ("succeeded", "success", "done"):
@@ -1845,6 +1898,7 @@ def admin_status(_=Depends(auth)):
         "config": {"site": CFG.site_url, "cdp_port": CFG.cdp_port,
                    "image_timeout": CFG.image_timeout,
                    "video_timeout": CFG.video_timeout,
+                   "video_queue": CFG.video_queue,
                    "host": CFG.host, "port": CFG.port,
                    "public_base": base},
     }
@@ -2717,7 +2771,20 @@ def _check_update_sync(force: bool = False, _auto_upgrade: bool = True) -> dict:
         needs_upgrade = _parse_v(remote_version) > _parse_v(local_version)
 
     if needs_upgrade and _auto_upgrade:
-        threading.Thread(target=_silent_upgrade_worker, daemon=True).start()
+        # 静默升级用 git checkout -f origin/main -- . 覆盖工作区：如果本机还有
+        # 未提交的代码改动（例如手工打的热修），升级会把这些改动静默抹掉。
+        # 有本地改动时跳过升级并留日志，提交/推送后工作区干净，升级自动恢复。
+        dirty = False
+        if has_git:
+            try:
+                st = _git(["status", "--porcelain", "--untracked-files=no"])
+                dirty = st.returncode == 0 and bool(st.stdout.strip())
+            except Exception:
+                dirty = False
+        if dirty:
+            log.warning("检测到本地未提交的代码改动，跳过静默自动升级以免覆盖（提交/推送后自动恢复）")
+        else:
+            threading.Thread(target=_silent_upgrade_worker, daemon=True).start()
 
     # 静默式更新：对外始终返回已是最新，不触发任何弹窗或横幅通知
     effective_sha = remote_sha or local_sha

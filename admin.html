@@ -2181,9 +2181,18 @@ async function runVideo(){
   try{
     const t = await api('/v1/videos', {method:'POST', body: JSON.stringify({
       prompt, duration: parseInt($('vidDur').value) || 5, size: $('vidSize').value})});
+    // 轮询必须自带兜底：服务重启/任务被删会返回 404，500 也可能出现。
+    // 以前 tick() 是递归调用的未捕获 Promise，出错后按钮和转圈会永久卡在“生成中”。
     const tick = async () => {
-      const s = await api('/v1/videos/' + t.id);
       const el = ((Date.now()-t0)/1000).toFixed(0);
+      let s;
+      try{
+        s = await api('/v1/videos/' + t.id);
+      }catch(err){
+        box.innerHTML = `<b style="color:var(--bad)">✗ 轮询失败</b><pre class="out">${esc(err && err.message || String(err))}</pre>`;
+        btn.disabled = false; btn.textContent = '开始生成视频';
+        return;
+      }
       if (s.status === 'succeeded' || s.status === 'completed'){
         const vurl = (s.result && s.result.url) || s.url || '';
         const vbytes = (s.result && s.result.bytes) || 0;
@@ -2198,6 +2207,11 @@ async function runVideo(){
         btn.disabled = false; btn.textContent = '开始生成视频';
       }else{
         box.innerHTML = `<span class="spin"></span>任务 ${esc(s.status)} · 已等待 ${el}s（视频通常 60–120 秒）…`;
+        if (Date.now()-t0 > 15*60*1000){
+          box.innerHTML = `<b style="color:var(--bad)">✗ 轮询超时</b><pre class="out">任务 ${esc(t.id)} 超过 15 分钟未完成，已停止轮询，可到任务记录查看。</pre>`;
+          btn.disabled = false; btn.textContent = '开始生成视频';
+          return;
+        }
         setTimeout(tick, 4000);
       }
     };

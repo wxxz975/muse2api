@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory() as home:
     engine._agent_count = lambda: 0
     engine._send = lambda prompt: "clicked"
     engine._wait_attachment = lambda *a, **k: queue.pop(0)
-    engine.extract_bytes = lambda src, expect: (
+    engine.extract_bytes = lambda src, expect, **kwargs: (
         originals[int(src.split("-")[1])] if src.startswith("upload-") else b"generated-result",
         "video/mp4", src)
     with patch("engine.time.sleep", lambda value: None):

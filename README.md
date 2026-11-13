@@ -319,7 +319,7 @@ curl -X POST "http://localhost:18610/v1/images/edits" \
   ```
   返回任务 ID：`{"id": "task_xyz789", "status": "queued"}`
 
-  多图参考视频在同一个请求中使用有序的 `images` 数组；这里支持的是多张图片作为视频参考，不支持上传视频文件作为参考：
+  多素材参考视频在同一个请求中使用有序的 `images` / `videos` / `audios` / `files` 字段（按此顺序依次上传）；参考视频上限 120 秒，单次请求最多 10 个素材。多图参考示例：
   ```bash
   curl -X POST "http://localhost:18610/v1/videos" \
     -H "Authorization: Bearer m2a_your_secret_key" \
@@ -396,9 +396,10 @@ Nginx 反代需把 `client_max_body_size` 调到 200M 左右，否则大素材�
 | `MUSE2API_PUBLIC_BASE` | `空` | 对外完整 URL 前缀，留空时前端自动识别访问来源 |
 | `MUSE2API_CHROMIUM` | `chromium` | 浏览器可执行程序完整路径 |
 | `MUSE2API_CDP_PORT` | `19210` | 内部 CDP 调试通信端口 |
-| `MUSE2API_CONCURRENCY` | `2` | 最大并发生成任务数（支持随服务器资源自由调高，默认 2） |
+| `MUSE2API_CONCURRENCY` | `8` | 最大并发生成任务数（支持随服务器资源自由调高） |
 | `MUSE2API_IMAGE_TIMEOUT` | `240` | 生图超时上限（秒） |
 | `MUSE2API_VIDEO_TIMEOUT` | `600` | 生视频超时上限（秒） |
+| `MUSE2API_VIDEO_QUEUE` | `8` | 排队中的视频任务上限，超出返回 429（视频单任务最长 10 分钟，防止重试把并发槽和额度打满） |
 | `MUSE2API_CHAT_TIMEOUT` | `300` | 对话生成超时上限（秒） |
 | `MUSE2API_REF_IMAGE_LOCAL_FILES` | `0` | 默认禁止读取服务器本地路径；仅可信单用户部署可显式设为 `1` 恢复 |
 | `MUSE2API_REF_IMAGE_PRIVATE_FETCH` | `0` | 默认仅允许公网 URL，并逐跳检查 DNS/重定向、固定已检查 IP、不使用环境代理；显式设为 `1` 才允许私网/本机 URL |

@@ -85,7 +85,8 @@ try:
         {"stop": True, "tail": "正在处理", "path": "/thread/new"},
         {"stop": False, "tail": refusal, "path": "/thread/new"},
     ])
-except engine_module.MuseModelRefusalError as exc:
+except engine_module.MuseRegionRestrictedError as exc:
+    # 地区限制是账号级限制（换号可能就能生成），必须抛可换号的专用异常。
     assert refusal in str(exc), str(exc)
 else:
     raise AssertionError("explicit region refusal was not returned promptly")

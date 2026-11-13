@@ -16,12 +16,15 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_waiter(path):
     tree = ast.parse(Path(path).read_text(encoding="utf-8"))
     engine = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "MuseEngine")
-    names = {"_wait_attachment", "_clean_model_text", "_media_refusal_text", "_media_status_pending"}
+    names = {"_wait_attachment", "_clean_model_text", "_media_refusal_text",
+             "_media_status_pending", "_is_region_refusal"}
     methods = [n for n in engine.body if isinstance(n, ast.FunctionDef) and n.name in names]
     module = ast.Module(body=[
         ast.ClassDef(name="MuseGenerationError", bases=[ast.Name(id="RuntimeError", ctx=ast.Load())],
                      keywords=[], body=[ast.Pass()], decorator_list=[]),
         ast.ClassDef(name="MuseModelRefusalError", bases=[ast.Name(id="MuseGenerationError", ctx=ast.Load())],
+                     keywords=[], body=[ast.Pass()], decorator_list=[]),
+        ast.ClassDef(name="MuseRegionRestrictedError", bases=[ast.Name(id="MuseGenerationError", ctx=ast.Load())],
                      keywords=[], body=[ast.Pass()], decorator_list=[]),
         ast.ClassDef(name="Waiter", bases=[], keywords=[], body=methods, decorator_list=[]),
     ], type_ignores=[])
@@ -104,6 +107,11 @@ def main():
             assert item["outcome"] == "timeout" and 45 <= item["elapsed"] < 46, (name, item)
         elif name == "stop_lifecycle":
             assert item["outcome"] == "video" and item["elapsed"] >= 30, (name, item)
+        elif name in ("explicit_refusal", "claim_then_refusal"):
+            # 地区限制是账号级限制：换一个地区的账号可能就能生成，所以必须走
+            # 可换号重试的专用异常，而不是「终态拒绝」。
+            assert item["outcome"] == "MuseRegionRestrictedError", (name, item)
+            assert item["elapsed"] < 25, (name, item)
         else:
             assert item["outcome"] == "MuseModelRefusalError", (name, item)
             assert item["elapsed"] < 25, (name, item)

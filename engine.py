@@ -226,6 +226,15 @@ class MuseModelRefusalError(MuseGenerationError):
     """Muse completed the turn with text instead of the requested media."""
 
 
+class MuseRegionRestrictedError(MuseGenerationError):
+    """The account's region blocks this capability (e.g. video).
+
+    This is an account-scoped limit, not a content refusal: another account in a
+    supported region can still generate, so callers must rotate instead of
+    treating the task as terminal.
+    """
+
+
 class RefImageSafetyError(MuseGenerationError):
     """A reference image source is forbidden by the configured input policy."""
 
@@ -1316,6 +1325,9 @@ class MuseEngine:
                 else:
                     refusal_last, refusal_stable = refusal, 0
                 if refusal_stable >= 4 and elapsed > 8.0:
+                    if self._is_region_refusal(refusal):
+                        raise MuseRegionRestrictedError(
+                            f"当前账号所在地区不支持该能力: {refusal}")
                     raise MuseModelRefusalError(f"模型未生成媒体，仅返回文本: {refusal}")
             else:
                 refusal_last, refusal_stable = "", 0
@@ -1330,6 +1342,9 @@ class MuseEngine:
                         last_txt, txt_stable = cur_txt, 0
                     if txt_stable >= 15 and elapsed > 8.0:
                         clean = self._clean_model_text(cur_txt)
+                        if self._is_region_refusal(clean):
+                            raise MuseRegionRestrictedError(
+                                f"当前账号所在地区不支持该能力: {clean}")
                         raise MuseModelRefusalError(
                             f"模型未生成媒体，仅返回文本: {clean}")
                 else:
@@ -1368,6 +1383,25 @@ class MuseEngine:
                 r"\b(?:video|image|render|upload)\b[^.\n]{0,32}\bfailed\b",
                 text, re.I):
             return False
+        # 进行时播报同样是「还在等」，不是拒绝。线上实测：渲染期展示
+        # 「正在生成视频，请稍候」「视频正在渲染，大约需要 2 分钟」时，
+        # 旧实现会把稳定 9 秒的进度文案判成模型拒绝并直接失败。
+        if re.search(
+                r"正在(?:为你|帮你|给你|替你)?(?:生成|渲染|制作|处理|上传|排队|准备|加载)|"
+                r"(?:视频|图片|素材|文件)(?:正在|还在|仍在)(?:生成|渲染|处理|上传|排队)",
+                text, re.I):
+            return True
+        if re.search(
+                r"(?:生成|渲染|处理|上传|排队|合成)中(?![的了])|"
+                r"请稍(?:候|等)|稍等(?:一下)?|马上就好|"
+                r"\b(?:generating|rendering|processing|uploading|queued|queuing)\b"
+                r"[^.\n]{0,40}\b(?:video|clip|image)\b|"
+                r"\b(?:video|clip|image)\b[^.\n]{0,40}"
+                r"\b(?:is|are)\s+(?:being\s+)?(?:generated|rendered|processed|uploaded|queued)\b|"
+                r"\bthis\s+(?:may|can|will|should)\s+take\b|"
+                r"\btakes?\s+(?:a\s+)?(?:few|couple|several|about|\d+)\b",
+                text, re.I):
+            return True
         return bool(re.search(
             r"\.(?:webp|png|jpe?g|mp4|webm)|imagine_media|deliverable|"
             r"generated\s+.*image|verified\s+generated|artifact|"
@@ -1400,6 +1434,20 @@ class MuseEngine:
             if clean and any(re.search(pattern, clean, re.I) for pattern in patterns):
                 return clean
         return ""
+
+    @staticmethod
+    def _is_region_refusal(text: str) -> bool:
+        """地区限制是账号级限制：换一个地区的账号可能就能生成，不能当终态。"""
+        for line in (text or "").splitlines():
+            if re.search(r"(?:国家|地区|country|region).{0,160}?"
+                         r"(?:不支持|不可用|无法|not available|unavailable|not supported)",
+                         line, re.I):
+                return True
+            # 英文页面常见倒装：not available in your region / country
+            if re.search(r"(?:not available|unavailable|not supported|不支持|不可用)"
+                         r".{0,160}?(?:国家|地区|country|region)", line, re.I):
+                return True
+        return False
 
     # ---------------- 取字节 ----------------
     _EXTRACT_JS = r"""
@@ -1573,11 +1621,18 @@ class MuseEngine:
             out += chunk
         return out
 
-    def extract_bytes(self, src: str, expect: str = "image", retries: int = 4):
+    def extract_bytes(self, src: str, expect: str = "image", retries: int = 4,
+                      deadline: float | None = None):
+        """把页面里的媒体取回字节。deadline 用 time.monotonic()。
+
+        以前每次尝试固定 600 秒、最多 4 次，任务声明的超时在这里完全失效；
+        视频体价比图片大得多，必须跟着任务 deadline 收口。
+        """
         last = "未知"
         for _ in range(retries):
+            remaining = 600.0 if deadline is None else max(10.0, deadline - time.monotonic())
             raw = self.page.js(self._EXTRACT_JS % (json.dumps(src), json.dumps(expect)),
-                               await_promise=True, timeout=600)
+                               await_promise=True, timeout=min(600.0, remaining))
             try:
                 info = json.loads(raw) if isinstance(raw, str) else raw
             except Exception:  # noqa: BLE001
@@ -1589,7 +1644,8 @@ class MuseEngine:
         raise MuseGenerationError(f"未能取回生成结果: {last}")
 
     # ---------------- 下载兜底 ----------------
-    def _download_fallback(self, src: str, timeout: int = 180) -> str | None:
+    def _download_fallback(self, src: str, timeout: float = 180,
+                           deadline: float | None = None) -> str | None:
         directory = self.download_dir
         before = set(os.listdir(directory))
         # ponytail: fail closed when the selected result has no local download;
@@ -1607,8 +1663,12 @@ class MuseEngine:
         })(%s)""" % json.dumps(src))
         if clicked == "none":
             return None
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        wait_deadline = time.time() + timeout
+        if deadline is not None:
+            # deadline 是 monotonic；换算成剩余秒数后与墙钟对齐，至少留 15 秒。
+            remaining = max(15.0, deadline - time.monotonic())
+            wait_deadline = min(wait_deadline, time.time() + remaining)
+        while time.time() < wait_deadline:
             time.sleep(1.5)
             new = [f for f in (set(os.listdir(directory)) - before)
                    if not f.endswith(".crdownload")]
@@ -1742,13 +1802,19 @@ class MuseEngine:
     """
 
     _FILE_INPUT_JS = "(function(){" + _COMPOSER_ROOTS_JS + """
-        var inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+        var bubble = '[class*=chat-user-bubble], [class*="group/msg"]';
+        var inputs = Array.from(document.querySelectorAll('input[type="file"]'))
+            .filter(function(x){ return !x.closest(bubble); });
+        if (!inputs.length) return null;
         var roots = __composerRoots();
         for (var r of roots) {
             var hit = inputs.find(function(x){ return r.contains(x); });
             if (hit) return hit;
         }
-        return null;
+        // 线上实测：多素材任务里 composer 的 input[type=file] 会被 React 重建，
+        // 可能短暂挂到 textarea 上 4 层之外。此时退回「不属于历史气泡的最后一个
+        // file input」，而不是直接判死。
+        return inputs[inputs.length - 1];
     })()"""
 
     _ATTACHED_COUNT_JS = "(function(){" + _COMPOSER_ROOTS_JS + """
@@ -1764,17 +1830,29 @@ class MuseEngine:
         return 0;
     })()"""
 
-    def _set_input_files(self, paths: list[str]):
-        """用 CDP 直接把磁盘文件交给上传控件（大视频不再经 base64 注入页面）。"""
-        res = self.page.send("Runtime.evaluate", {
-            "expression": self._FILE_INPUT_JS, "returnByValue": False})
-        object_id = (res.get("result", {}).get("result", {}) or {}).get("objectId")
-        if not object_id:
-            raise MuseGenerationError("找不到上传控件，已停止生成")
-        self.page.send("DOM.setFileInputFiles",
-                       {"files": paths, "objectId": object_id}, timeout=60)
+    def _set_input_files(self, paths: list[str], timeout: float = 20.0):
+        """用 CDP 直接把磁盘文件交给上传控件（大视频不再经 base64 注入页面）。
 
-    def _attach_images(self, image_data: list[str]) -> dict | None:
+        线上实测（东京节点，51 个视频任务）：多素材任务出现 7 次
+        「找不到上传控件」，全部发生在第 2 个素材之后 —— composer 的
+        input[type=file] 在上一次递交后会被 React 重新挂载，短暂不在 DOM 里。
+        所以这里轮询等待控件出现，而不是查一次就判死。
+        """
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            res = self.page.send("Runtime.evaluate", {
+                "expression": self._FILE_INPUT_JS, "returnByValue": False})
+            object_id = (res.get("result", {}).get("result", {}) or {}).get("objectId")
+            if object_id:
+                self.page.send("DOM.setFileInputFiles",
+                               {"files": paths, "objectId": object_id}, timeout=60)
+                return
+            if time.monotonic() >= deadline:
+                raise MuseGenerationError("找不到上传控件，已停止生成")
+            time.sleep(0.25)
+
+    def _attach_images(self, image_data: list[str],
+                       deadline: float | None = None) -> dict | None:
         """逐个附加参考素材（图片/视频/音频/文档），并确认全部进入输入框。
 
         返回 {"dir": 临时目录, "hashes": 素材 sha256 集合}；调用方在生成结束后
@@ -1808,6 +1886,7 @@ class MuseEngine:
         os.makedirs(self.cfg.profile_dir, exist_ok=True)
         upload_dir = tempfile.mkdtemp(prefix="muse2api-refs-", dir=self.cfg.profile_dir)
         hashes = set()
+        paths: list[str] = []
         try:
             for index, data, mime in files:
                 path = os.path.join(
@@ -1815,32 +1894,68 @@ class MuseEngine:
                 with open(path, "wb") as f:
                     f.write(data)
                 hashes.add(hashlib.sha256(data).hexdigest())
-                self._set_input_files([path])
-                time.sleep(0.35)
-        except MuseGenerationError:
-            shutil.rmtree(upload_dir, ignore_errors=True)
-            raise
+                paths.append(path)
         except Exception as e:
             shutil.rmtree(upload_dir, ignore_errors=True)
             raise MuseGenerationError("附加参考素材失败，已停止生成") from e
 
         try:
-            # A remove button proves attachment presence, not upstream processing success.
-            deadline = time.monotonic() + 30.0
-            attached_count = 0
-            while time.monotonic() < deadline:
-                attached_count = self.page.js(self._ATTACHED_COUNT_JS)
-                if int(attached_count or 0) >= len(files):
-                    break
-                time.sleep(0.3)
-            else:
-                raise MuseGenerationError(
-                    f"参考素材上传未确认（{int(attached_count or 0)}/{len(files)}），已停止生成")
+            self._upload_references(paths, deadline=deadline)
             time.sleep(0.5)
             return {"dir": upload_dir, "hashes": hashes}
         except Exception:
             shutil.rmtree(upload_dir, ignore_errors=True)
             raise
+
+    # 线上实测（东京节点 51 个视频任务）：多素材任务里「参考素材上传未确认（2/4、
+    # 3/4、4/5）」4 次、「找不到上传控件」7 次，全部集中在 ≥2 个素材，单素材从未
+    # 失败。原因是：① 逐个投喂时 muse 会重建 input[type=file]；② 连续投喂时静默吞掉
+    # 某个文件；③ 原实现只给整批 30 秒确认窗口，慢一点就整单失败。
+    _UPLOAD_TOTAL_BUDGET = 240.0   # 单次任务全部素材的总预算（秒）
+    _UPLOAD_PER_FILE_TIMEOUT = 60.0  # 单个素材等待「进入输入框」的上限（秒）
+    _UPLOAD_ROUNDS = 3             # 被吞掉的素材最多补投几轮
+
+    def _attached_count(self) -> int:
+        # 读不到就抛：CDP 断连不能当成「0 个附件」继续等待，否则会空转到超时。
+        return int(self.page.js(self._ATTACHED_COUNT_JS) or 0)
+
+    def _wait_attached_count(self, target: int, deadline: float) -> bool:
+        """等到输入框里的附件数 >= target；到 deadline 仍未达到返回 False。"""
+        while time.monotonic() < deadline:
+            if self._attached_count() >= target:
+                return True
+            time.sleep(0.3)
+        return self._attached_count() >= target
+
+    def _upload_references(self, paths: list[str], deadline: float | None = None):
+        """逐个投喂参考素材，并且「确认这一张真的进了输入框」再投下一张。"""
+        budget = self._UPLOAD_TOTAL_BUDGET
+        if deadline is not None:
+            # 留出至少 45 秒给上传，但不能超过任务本身的剩余时间
+            budget = min(budget, max(45.0, deadline - time.monotonic()))
+        upload_deadline = time.monotonic() + budget
+        pending = list(paths)
+        for _round in range(self._UPLOAD_ROUNDS):
+            if not pending or time.monotonic() >= upload_deadline:
+                break
+            for path in list(pending):
+                if time.monotonic() >= upload_deadline:
+                    break
+                if self._attached_count() >= len(paths):
+                    pending = []
+                    break
+                before = self._attached_count()
+                self._set_input_files([path])
+                per_file_deadline = min(
+                    upload_deadline, time.monotonic() + self._UPLOAD_PER_FILE_TIMEOUT)
+                if self._wait_attached_count(before + 1, per_file_deadline):
+                    pending.remove(path)
+                else:
+                    log.warning("参考素材未被输入框接收，准备补投: %s", os.path.basename(path))
+        attached = self._attached_count()
+        if pending and attached < len(paths):
+            raise MuseGenerationError(
+                f"参考素材上传未确认（{attached}/{len(paths)}），已停止生成")
 
     def _attach_image(self, image_data: str):
         """Backward-compatible single-reference wrapper."""
@@ -1856,7 +1971,7 @@ class MuseEngine:
         self.reset_thread(for_chat=False)
         self._scroll_bottom()
         refs = list(reference_images or ([] if not reference_image else [reference_image]))
-        upload = self._attach_images(refs) if refs else None
+        upload = self._attach_images(refs, deadline=deadline) if refs else None
         if not refs:
             self._clear_attachments()
         try:
@@ -1878,6 +1993,9 @@ class MuseEngine:
         if self._send(prompt) not in ("clicked", "enter-sent"):
             raise MuseGenerationError("提示词发送未确认，已停止生成")
         os.makedirs(self.cfg.media_dir, exist_ok=True)
+        # 取回成品自身也要受任务超时约束：以前每次尝试固定 600 秒 ×4，视频任务
+        # 可以在声明超时之后再跑十几分钟。至少留 60 秒，避免刚好踩线失败。
+        fetch_deadline = max(deadline, time.monotonic() + 60.0)
         # 页面若把刚上传的素材渲染成"结果"，按哈希识别出来并继续等待真正的成品
         while time.monotonic() < deadline:
             if stop_event is not None and stop_event.is_set():
@@ -1894,7 +2012,8 @@ class MuseEngine:
             data = mime = url = None
             selected_src = (att.get("vSrc") if expect == "video" else None) or att.get("src") or ""
             try:
-                data, mime, url = self.extract_bytes(selected_src, expect=expect)
+                data, mime, url = self.extract_bytes(
+                    selected_src, expect=expect, deadline=fetch_deadline)
             except Exception:  # noqa: BLE001
                 self._debug_dump("extract-fail")
 
@@ -1918,7 +2037,7 @@ class MuseEngine:
                         "via": "blob", "attachment": att.get("tid"),
                         "w": att.get("w"), "h": att.get("h")}
 
-            path = self._download_fallback(selected_src)
+            path = self._download_fallback(selected_src, deadline=fetch_deadline)
             if not path:
                 raise MuseGenerationError("已生成但未能取回文件")
             with open(path, "rb") as f:
