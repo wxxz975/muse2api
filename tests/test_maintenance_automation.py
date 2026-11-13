@@ -125,6 +125,22 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
         query.assert_called_once_with(self.a["id"], True)
         self.assertEqual(app.store.get_account(self.a["id"])["last_used"], 1234)
 
+    async def test_saved_include_disabled_overrides_legacy_environment_default(self):
+        """The saved UI switch wins even if the deployment env originally enabled it."""
+        disabled = app.store.add_account({"hatch_sess": "disabled-cadence-fixture"})
+        app.store.update_account(disabled["id"], enabled=False)
+        app.maintenance_settings.update({"include_disabled": False, "quota_enabled": False})
+        def probe(aid, check_quota=False):
+            return {"ok": True, "id": aid}
+        with patch.object(app.CFG, "keepalive_disabled_accounts", True), \
+             patch.object(app, "_probe_account_sync", side_effect=probe) as keep:
+            await app.run_account_maintenance(force=True)
+            self.assertEqual([x.args[0] for x in keep.call_args_list], [self.a["id"]])
+            keep.reset_mock()
+            app.maintenance_settings.update({"include_disabled": True})
+            await app.run_account_maintenance(force=True)
+            self.assertEqual({x.args[0] for x in keep.call_args_list}, {self.a["id"], disabled["id"]})
+
     async def test_settings_persist_validate_and_are_hot(self):
         result = app.update_maintenance_settings(app.MaintenancePatch(quota_interval_minutes=7,
                          keepalive_interval_minutes=11, quota_enabled=False))
