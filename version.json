@@ -1,23 +1,19 @@
 {
-  "version": "1.6.11",
-  "updated_at": "2026-11-13",
+  "version": "1.6.12",
+  "updated_at": "2026-11-14",
   "repo": "https://github.com/wxxz975/muse2api",
   "highlights": [
-    "自行维护的二次开发版本，保留 czg86389-hub/muse2api 原作者致谢与 MIT 许可证。",
-    "新增管理页批量网页登录：邮箱/手机号加自动取码链接或手动验证码；隔离账号会话，完成上游认证后保存 Cookie，不是账号密码直登，也不绕过人工验证。",
-    "账号重复会话自动归并；已认证邮箱或稳定用户身份支持跨会话去重，代理/身份冲突拒绝合并，旧账号 ID 保留别名并备份迁移数据。",
-    "维护设置可配置保活和额度查询周期，关闭管理页后后台仍会运行；复用原 Settings 页面查询真实额度与重置文案，不虚构有效期和最后业务使用时间。",
-    "账号额度改为卡片展示：套餐、已用百分比与进度条、额度重置时间、Cookie 有效期及最近刷新；未知值明确显示未知。",
-    "新增持久脱敏诊断日志：按任务/账号筛选上传、发送、等待成品、取回与重试阶段，保留错误类型和安全异常栈；写入故障不影响已成功的视频。",
-    "更新后请强制刷新管理页。扩展仍为 1.0.2、油猴脚本 1.1.2，无需重装；旧扩展仍需手动在每个浏览器个人资料中升级。"
+    "账号卡片显示剩余额度，从100%绿色至0%红色渐变，重置时间保留上游原文。",
+    "新增每日超限清理设置：媒体与诊断日志分别设上限/目标，按最老文件优先，默认关闭，重启不重复执行当日检查。",
+    "统一账号登录入口，批量验证码登录优先，手动Cookie与扩展工具折叠保留为高级兼容方式。",
+    "移除首页热升级宣传和后台静默升级，只保留本仓库正式Release的手动只读版本检查。",
+    "扩展仍为1.0.2、油猴脚本1.1.2，已有插件无需重装；旧版仍需手动在每个浏览器个人资料中升级。"
   ],
   "highlights_en": [
-    "Self-maintained fork of czg86389-hub/muse2api; original authorship and MIT license preserved.",
-    "Admin-managed batch login uses email/phone plus automatic mailbox-code URL or manual OTP, isolated browser contexts and verified upstream sessions, not password login or CAPTCHA bypass.",
-    "Deduplicate identical sessions and verified account identities with conflict checks, legacy ID aliases and private migration backups; unknown identities are not guessed.",
-    "Configurable background session and quota maintenance reuses the existing Settings-page automation. Real expiry and last business use remain distinct from maintenance timestamps.",
-    "Quota account cards show the plan, validated usage percentage/progress, upstream reset information, cookie expiry and last refresh. Unknown data stays unknown.",
-    "Persistent redacted task diagnostics cover upload, send, wait, extraction and retry phases, error types and safe stack frames without exposing credentials.",
-    "Hard-refresh the dashboard after updating. Extension remains 1.0.2 and userscript 1.1.2; older extensions still require a manual upgrade in every browser profile."
+    "Quota cards show remaining balance, gradually colored from green at 100% to red at 0%, retaining upstream reset text.",
+    "Optional daily FIFO retention checks media and diagnostics separately, only deleting over their configured limits; disabled by default and claimed once per local day across restarts.",
+    "Account login combines batch OTP login with collapsed advanced Cookie and extension import tools.",
+    "Removed the homepage upgrade/promotional box and all silent code updates; only explicit read-only release checks against this maintained fork remain.",
+    "Extension remains 1.0.2 and userscript 1.1.2; older extensions still require a manual upgrade in every browser profile."
   ]
 }

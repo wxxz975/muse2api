@@ -95,7 +95,7 @@
 
   /* ---------- 表单 ---------- */
   label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px}
-  input[type=text],input[type=number],.proxy-dialog input[type=password],textarea,select{
+  input[type=text],input[type=number],input[type=time],.proxy-dialog input[type=password],textarea,select{
     width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:9px;
     padding:9px 12px;font-size:13px;outline:none;transition:.15s;font-family:inherit
   }
@@ -150,8 +150,8 @@
   .account-quota{background:rgba(6,9,17,.35);border:1px solid var(--line);border-radius:10px;padding:12px}
   .quota-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:8px;color:var(--muted)}
   .quota-heading strong{font-size:14px;color:var(--text);white-space:nowrap}.quota-track{height:10px;border-radius:99px;background:#202c44;overflow:hidden}
-  .quota-fill{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#16a34a,var(--ok));transition:width .2s}
-  .quota-track.warn .quota-fill{background:var(--warn)}.quota-track.bad .quota-fill{background:var(--bad)}.quota-track.unknown{border:1px dashed #46516b;background:transparent}
+  .quota-fill{display:block;height:100%;border-radius:99px;transition:width .2s,background-color .2s}
+  .quota-track.unknown{border:1px dashed #46516b;background:transparent}
   .quota-reset{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;line-height:1.65;margin-top:8px}.quota-reset b{color:var(--text);font-weight:500}.quota-raw{font-size:10.5px;opacity:.8}
   .account-extra{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}.account-extra .quota-heading strong{font-size:12px}
   .account-times{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:0}.account-times>div{min-width:0}.account-times dt{color:var(--muted);font-size:11px;margin-bottom:3px}.account-times dd{margin:0;font-size:11.5px;overflow-wrap:anywhere;line-height:1.65}
@@ -214,7 +214,7 @@
   .keybox.ok .lbl{color:var(--ok)}
   .keybox.miss .lbl{color:var(--warn)}
   .langsel{width:auto;flex:0 0 auto;background:var(--bg2);color:var(--text);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
-  .updpill-alert{border-color:rgba(251,191,36,.8)!important;background:rgba(251,191,36,.15)!important;color:var(--warn)!important;animation:pulse 1.6s infinite}
+  .login-advanced>summary{cursor:pointer;font-weight:600}.login-advanced>.card{margin-top:16px}.cleanup-warning{color:var(--warn)}
   /* Maintenance, OTP login and diagnostic views keep scrolling inside cards. */
   .automation-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
   .automation-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
@@ -241,13 +241,6 @@
   <div class="hwrap">
     <div class="logo">
       <span class="dot"></span>muse2api <small>Muse 网页额度 · 反代 API</small>
-      <a href="https://github.com/wxxz975/muse2api" target="_blank" class="pill" style="margin-left:10px;text-decoration:none;color:var(--text);border-color:var(--line2);cursor:pointer" title="打开 GitHub 开源仓库 (https://github.com/wxxz975/muse2api)">
-        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-        <b>GitHub 仓库</b>
-      </a>
-      <button class="ghost mini" onclick="toggleRepoPanel()" id="btnRepoTop" style="display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 11px;font-size:12px" title="查看官方仓库最新版本状态与更新通知">
-        📦 <span id="repoTopTxt">版本检测</span>
-      </button>
     </div>
     <div class="pills">
       <span class="pill" id="pSvc"><span class="led"></span>服务 <b>—</b></span>
@@ -268,40 +261,6 @@
 </header>
 
 <main>
-  <!-- 实时新版本更新通知横幅（当官方仓库有新提交/新版本时自动向所有已部署用户弹出） -->
-  <div class="banner" id="updateBanner" style="border-color:rgba(79,140,255,.65);background:linear-gradient(90deg,rgba(79,140,255,.16),rgba(167,139,250,.05));align-items:center;justify-content:space-between;flex-wrap:wrap">
-    <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:260px">
-      <span class="ic">🔔</span>
-      <div>
-        <b style="color:#60a5fa">检测到 muse2api 官方仓库发布了新版本更新！</b>
-        <span id="updBannerVer" class="badge info" style="margin-left:8px">新版本</span><br>
-        <span id="updBannerMsg" style="color:var(--muted);font-size:13px">官方仓库已有新功能或性能优化提交，点击右侧按钮即可一键在线升级（自动保留本地 .env 密钥与账号池数据）。</span>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button onclick="upgradeNow()" id="btnBannerUpgrade">⚡ 一键在线升级并重启</button>
-      <button class="ghost mini" onclick="toggleRepoPanel()">查看更新内容</button>
-      <button class="ghost mini" onclick="dismissUpdateBanner()">暂不提醒</button>
-    </div>
-  </div>
-
-  <!-- 版本状态与官方仓库更新中心面板 -->
-  <div class="card" id="repoPanel" style="display:none;border-color:rgba(79,140,255,.45);margin-bottom:16px">
-    <h3>
-      <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-      官方仓库版本检测与在线热升级
-      <a href="https://github.com/wxxz975/muse2api" target="_blank" class="tag" style="color:var(--accent)">wxxz975/muse2api ↗</a>
-      <span id="repoBadge" class="badge info" style="margin-left:auto">检测中…</span>
-    </h3>
-    <div class="hint" id="repoStatusDesc" data-i18n="repo-status-desc">正在实时对比本地版本与 GitHub 官方仓库最新版本…（在线升级自动保留 <code>.env</code> 密钥与 <code>data/</code> 账号池及媒体数据）</div>
-    <div id="repoCommitsBox" style="margin-top:10px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:12.5px"></div>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button onclick="upgradeNow()" id="btnRepoPull">⚡ 一键从 GitHub 在线更新并重启</button>
-      <button class="ghost" onclick="loadRepoStatus(true)">🔍 立即重新检测更新</button>
-      <a href="https://github.com/wxxz975/muse2api/commits/main" target="_blank" class="btnlike ghostlike" style="padding:7px 13px;font-size:12.5px">查看 GitHub 完整提交记录 ↗</a>
-    </div>
-  </div>
-
   <div class="banner" id="authBanner">
     <span class="ic">🔑</span>
     <div data-i18n="auth-banner">
@@ -316,8 +275,7 @@
 
   <nav class="tabs">
     <button class="active" data-t="pool">账号池</button>
-    <button data-t="cookie">获取 Cookie</button>
-    <button data-t="login">批量登录</button>
+    <button data-t="login">账号登录</button>
     <button data-t="maintenance">维护设置</button>
     <button data-t="tasks">任务记录</button>
     <button data-t="logs">诊断日志</button>
@@ -325,8 +283,6 @@
     <button data-t="play">接口测试</button>
     <button data-t="docs">接入文档</button>
   </nav>
-
-  <div class="card" id="extensionUpgradeNotice" style="border-color:var(--warn)" role="note" data-i18n="extension-upgrade-notice"><b>重要：请手动升级浏览器插件至 1.0.2</b><br>更新服务不会自动升级已加载的扩展。下载新包，替换原扩展目录文件，再到 <code>chrome://extensions</code> 或 <code>edge://extensions</code> 点击“重新加载”。不同浏览器个人资料需分别升级。<br><a href="/admin/extension" download="muse2api-chrome-extension.zip">下载扩展 1.0.2</a>；油猴用户请升级脚本至 1.1.2。</div>
 
   <!-- ==================== 账号池 ==================== -->
   <section class="tab active" id="tab-pool">
@@ -370,26 +326,9 @@
     </div>
 
     <div class="card">
-      <h3>添加账号 <span class="tag">支持批量</span></h3>
-      <div class="hint" data-i18n="add-account-hint">
-        从浏览器复制 <b>muse.ai</b> 的 Cookie 字符串粘贴进来即可。必要 cookie：
-        <code>hatch_sess</code>。<code>hatch_vml</code> 为可选工作区令牌，缺少时不阻止导入。
-        批量导入时每行一个账号，格式 <code>标签 | cookie串</code>（标签可省略）。
-      </div>
-      <div class="row">
-        <div style="max-width:230px">
-          <label>账号标签（单条导入用）</label>
-          <input type="text" id="newLabel" placeholder="例如 muse-main">
-        </div>
-        <div style="flex:3">
-          <label>Cookie 字符串</label>
-          <textarea id="newCookie" rows="4" placeholder="hatch_sess=...; hatch_vml=...&#10;或批量：&#10;acc-01 | hatch_sess=...; hatch_vml=...&#10;acc-02 | hatch_sess=...; hatch_vml=..."></textarea>
-        </div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-        <button class="primary-lg" onclick="addAccount(false)">导入账号</button>
-        <button class="ghost" onclick="document.getElementById('newCookie').value='';">清空</button>
-      </div>
+      <h3>添加账号</h3>
+      <p class="hint">使用验证码批量登录；已有 Cookie 可在账号登录的高级选项中导入。</p>
+      <button type="button" id="poolLogin" onclick="goTab('login')">前往账号登录</button>
     </div>
 
     <div class="card">
@@ -409,8 +348,54 @@
     </div>
   </section>
 
-  <!-- ==================== 获取 Cookie ==================== -->
-  <section class="tab" id="tab-cookie">
+  <!-- ==================== 批量 OTP 登录 ==================== -->
+  <section class="tab" id="tab-login">
+    <div class="card">
+      <h3>批量登录 <span class="tag">邮箱 / 手机号 + 验证码</span></h3>
+      <p class="hint">每行：邮箱或手机号 | OTP_URL | 标签；只填账号时手动输入 6 位验证码。最多 20 个账号，不支持密码登录。</p>
+      <p class="hint">仅使用你有权访问的账号和取码地址。验证码、取码链接仅用于本次任务，不保存到浏览器；提交后输入会清空。远程访问请使用 HTTPS。</p>
+      <label for="loginAccounts">待登录账号</label>
+      <textarea id="loginAccounts" rows="5" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="user@example.com | https://mail.example.com/inbox | main&#10;user2@example.com" data-no-i18n></textarea>
+      <div class="automation-actions">
+        <button type="button" id="loginStart" onclick="startLoginBatch()">开始批量登录</button>
+        <button type="button" class="ghost" onclick="clearLoginInputs()">清空输入</button>
+        <button type="button" class="ghost" id="loginRefresh" onclick="refreshLoginBatch()" disabled>刷新登录状态</button>
+        <button type="button" class="danger" id="loginCancel" onclick="cancelLoginBatch()" disabled>取消批次</button>
+      </div>
+      <div id="loginMessage" class="automation-message" role="status" aria-live="polite"></div>
+      <div class="hint"><span>批次 ID</span>：<span id="loginBatchId" class="mono" data-no-i18n>—</span> · <span id="loginBatchStatus">尚未提交</span></div>
+      <p class="hint">遇到 CAPTCHA、MFA 或首次引导时需要人工处理，系统不会绕过验证或将其标记为成功。</p>
+      <div class="tblwrap"><table class="automation-table">
+        <thead><tr><th>序号</th><th>账号 / 标签</th><th>状态 / 阶段</th><th>详情 / 验证码</th></tr></thead>
+        <tbody id="loginBody"><tr><td colspan="4" class="empty">尚未提交</td></tr></tbody>
+      </table></div>
+    </div>
+    <details class="card login-advanced" id="loginAdvanced">
+      <summary>高级：Cookie 导入与浏览器扩展</summary>
+      <p class="hint">优先使用上方验证码登录。以下仅为已有会话的兼容导入方式，Cookie 不会保存到浏览器；提交或离开此页会清空输入。</p>
+  <div class="card" id="extensionUpgradeNotice" style="border-color:var(--warn)" role="note" data-i18n="extension-upgrade-notice"><b>重要：请手动升级浏览器插件至 1.0.2</b><br>更新服务不会自动升级已加载的扩展。下载新包，替换原扩展目录文件，再到 <code>chrome://extensions</code> 或 <code>edge://extensions</code> 点击“重新加载”。不同浏览器个人资料需分别升级。<br><a href="/admin/extension" download="muse2api-chrome-extension.zip">下载扩展 1.0.2</a>；油猴用户请升级脚本至 1.1.2。</div>
+    <div class="card">
+      <h3>手工导入 <span class="tag">支持批量</span></h3>
+      <div class="hint" data-i18n="add-account-hint">
+        从浏览器复制 <b>muse.ai</b> 的 Cookie 字符串粘贴进来即可。必要 cookie：
+        <code>hatch_sess</code>。<code>hatch_vml</code> 为可选工作区令牌，缺少时不阻止导入。
+        批量导入时每行一个账号，格式 <code>标签 | cookie串</code>（标签可省略）。
+      </div>
+      <div class="row">
+        <div style="max-width:230px">
+          <label>账号标签（单条导入用）</label>
+          <input type="text" id="newLabel" placeholder="例如 muse-main">
+        </div>
+        <div style="flex:3">
+          <label>Cookie 字符串</label>
+          <textarea id="newCookie" rows="4" autocomplete="off" spellcheck="false" placeholder="hatch_sess=...; hatch_vml=...&#10;或批量：&#10;acc-01 | hatch_sess=...; hatch_vml=...&#10;acc-02 | hatch_sess=...; hatch_vml=..."></textarea>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="primary-lg" onclick="addAccount(false)">导入账号</button>
+        <button class="ghost" onclick="clearCookieInputs()">清空</button>
+      </div>
+    </div>
     <div class="card" style="border-color:rgba(52,211,153,.45)">
       <h3>方式一：浏览器扩展 <span class="tag">推荐 · 零命令行 · 全平台</span></h3>
       <div class="hint" data-i18n="ext-why-hint">
@@ -512,7 +497,7 @@
         </div>
         <div style="flex:3">
           <label>Cookie 字符串</label>
-          <textarea id="mCookie" rows="3" placeholder="hatch_sess=...; hatch_vml=..."></textarea>
+          <textarea id="mCookie" rows="3" autocomplete="off" spellcheck="false" placeholder="hatch_sess=...; hatch_vml=..."></textarea>
         </div>
       </div>
       <div style="margin-top:12px">
@@ -557,30 +542,7 @@
       </table></div>
       <div class="hint" style="margin:12px 0 0;line-height:1.85" data-i18n="lifetime-hint">登录会话是否有效以上游认证为准。hatch_vml 是可选工作区令牌，可能缺失或重新签发，不能仅凭缺少它或其到期时间判断账号失效。导入后请点击“测试”；收到 HTTP 401 时再重新登录并导入。</div>
     </div>
-  </section>
-
-  <!-- ==================== 批量 OTP 登录 ==================== -->
-  <section class="tab" id="tab-login">
-    <div class="card">
-      <h3>批量登录 <span class="tag">邮箱 / 手机号 + 验证码</span></h3>
-      <p class="hint">每行：邮箱或手机号 | OTP_URL | 标签；只填账号时手动输入 6 位验证码。最多 20 个账号，不支持密码登录。</p>
-      <p class="hint">仅使用你有权访问的账号和取码地址。验证码、取码链接仅用于本次任务，不保存到浏览器；提交后输入会清空。远程访问请使用 HTTPS。</p>
-      <label for="loginAccounts">待登录账号</label>
-      <textarea id="loginAccounts" rows="5" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="user@example.com | https://mail.example.com/inbox | main&#10;user2@example.com" data-no-i18n></textarea>
-      <div class="automation-actions">
-        <button type="button" id="loginStart" onclick="startLoginBatch()">开始批量登录</button>
-        <button type="button" class="ghost" onclick="clearLoginInputs()">清空输入</button>
-        <button type="button" class="ghost" id="loginRefresh" onclick="refreshLoginBatch()" disabled>刷新登录状态</button>
-        <button type="button" class="danger" id="loginCancel" onclick="cancelLoginBatch()" disabled>取消批次</button>
-      </div>
-      <div id="loginMessage" class="automation-message" role="status" aria-live="polite"></div>
-      <div class="hint"><span>批次 ID</span>：<span id="loginBatchId" class="mono" data-no-i18n>—</span> · <span id="loginBatchStatus">尚未提交</span></div>
-      <p class="hint">遇到 CAPTCHA、MFA 或首次引导时需要人工处理，系统不会绕过验证或将其标记为成功。</p>
-      <div class="tblwrap"><table class="automation-table">
-        <thead><tr><th>序号</th><th>账号 / 标签</th><th>状态 / 阶段</th><th>详情 / 验证码</th></tr></thead>
-        <tbody id="loginBody"><tr><td colspan="4" class="empty">尚未提交</td></tr></tbody>
-      </table></div>
-    </div>
+    </details>
   </section>
 
   <!-- ==================== 维护设置 ==================== -->
@@ -609,6 +571,46 @@
         <div><dt>最近额度查询</dt><dd id="maintenanceLastQuota" class="mono">—</dd></div>
       </dl>
       <details><summary>最近维护结果（脱敏 JSON）</summary><pre id="maintenanceResult" class="out" data-no-i18n>—</pre></details>
+    </div>
+    <div class="card" id="cleanupSettingsCard">
+      <h3>每日清理 <span class="tag">默认关闭，按需启用</span></h3>
+      <p class="hint">每天在指定时区的指定时间检查一次。媒体和诊断日志分别计算占用；只有超过各自上限才按修改时间从旧到新（FIFO）删除，直到降至目标占用。</p>
+      <p class="hint cleanup-warning">删除不可恢复。新文件受保护，可能无法降至目标。读取设置不会删除；启用后若当天检查时间已过，将在下一轮后台检查执行一次。</p>
+      <form id="cleanupForm">
+        <label class="check-label"><input id="cleanupEnabled" type="checkbox">启用每日清理（会永久删除超限文件）</label>
+        <div class="automation-form">
+          <div><label for="cleanupCheckTime">每天检查时间（24 小时制）</label><input id="cleanupCheckTime" type="time" step="60" value="03:00" required></div>
+          <div><label for="cleanupTimezone">检查时区（IANA）</label><input id="cleanupTimezone" type="text" value="Asia/Shanghai" autocomplete="off" spellcheck="false" required></div>
+        </div>
+        <div class="automation-form" style="margin-top:16px">
+          <div>
+            <label class="check-label"><input id="cleanupMediaEnabled" type="checkbox" checked>清理媒体文件</label>
+            <label for="cleanupMediaMax">媒体占用上限（MB）</label><input id="cleanupMediaMax" type="number" min="1" max="1048576" step="1" value="10240" required>
+            <label for="cleanupMediaTarget" style="margin-top:8px">媒体目标占用（MB）</label><input id="cleanupMediaTarget" type="number" min="0" max="1048575" step="1" value="8192" required>
+          </div>
+          <div>
+            <label class="check-label"><input id="cleanupLogsEnabled" type="checkbox" checked>清理诊断日志</label>
+            <label for="cleanupLogsMax">日志占用上限（MB）</label><input id="cleanupLogsMax" type="number" min="1" max="1048576" step="1" value="100" required>
+            <label for="cleanupLogsTarget" style="margin-top:8px">日志目标占用（MB）</label><input id="cleanupLogsTarget" type="number" min="0" max="1048575" step="1" value="80" required>
+          </div>
+        </div>
+        <p class="hint">MB 按 1024² 字节计。上限为 1–1048576 的整数，目标为非负整数且必须小于对应上限。日志清理只处理服务管理的诊断日志，不删除账号或任务数据。</p>
+        <div class="automation-actions"><button type="submit" id="cleanupSave" disabled>保存每日清理设置</button><button type="button" class="ghost" id="cleanupReload" onclick="loadCleanupSettings()">重新加载清理设置</button></div>
+      </form>
+      <div id="cleanupMessage" class="automation-message" role="status" aria-live="polite"></div>
+      <span id="cleanupStatus" class="badge mute">清理设置待加载</span>
+      <dl class="automation-state">
+        <div><dt>最近检查日期（指定时区）</dt><dd id="cleanupLastDate" class="mono">—</dd></div>
+        <div><dt>最近清理检查</dt><dd id="cleanupLastRun" class="mono">—</dd></div>
+        <div><dt>下次清理检查</dt><dd id="cleanupNextRun" class="mono">—</dd></div>
+      </dl>
+      <div id="cleanupResult" class="automation-message" role="status" aria-live="polite">尚无清理结果</div>
+    </div>
+    <div class="card">
+      <h3>版本信息</h3>
+      <p class="hint">仅手动检查版本，不自动更新、拉取代码或重启服务。</p>
+      <button type="button" class="ghost" id="versionCheck" onclick="checkNewVersion()">检查新版本</button>
+      <div id="versionMessage" class="automation-message" role="status" aria-live="polite">尚未检查版本</div>
     </div>
   </section>
 
@@ -660,6 +662,7 @@
           <div class="hint" style="margin:0">所有已生成并落盘的图片 / 视频，可直接下载或把链接给下游项目使用。</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button type="button" class="ghost mini" onclick="goTab('maintenance')">每日清理设置</button>
           <button class="ghost mini" onclick="loadMedia()">刷新</button>
           <button class="ghost mini" id="btnSelectAllMedia" onclick="toggleSelectAllMedia()">全选</button>
           <button class="danger mini" id="btnDelSelectedMedia" onclick="delSelectedMedia()" style="display:none">删除选中 (<span id="selMediaCount">0</span>)</button>
@@ -908,6 +911,71 @@ function setLang(v){
 }
 /* 整句：中文 → 英文 */
 const I18N_EN = {
+  "周剩余额度": "Weekly quota remaining",
+  "额外剩余额度": "Extra quota remaining",
+  "额度读取失败：": "Quota read failed: ",
+  "账号登录": "Account login",
+  "前往账号登录": "Go to account login",
+  "使用验证码批量登录；已有 Cookie 可在账号登录的高级选项中导入。": "Sign in in batches with verification codes. Import existing cookies under the advanced account login options.",
+  "高级：Cookie 导入与浏览器扩展": "Advanced: cookie import and browser extension",
+  "优先使用上方验证码登录。以下仅为已有会话的兼容导入方式，Cookie 不会保存到浏览器；提交或离开此页会清空输入。": "Use code login above first. These compatibility options import existing sessions only. Cookies are not saved in browser storage, and inputs are cleared on submission or when leaving this tab.",
+  "手工导入": "Manual import",
+  "每日清理": "Daily cleanup",
+  "默认关闭，按需启用": "Off by default; opt in as needed",
+  "每天在指定时区的指定时间检查一次。媒体和诊断日志分别计算占用；只有超过各自上限才按修改时间从旧到新（FIFO）删除，直到降至目标占用。": "Check once daily at the chosen time in the specified time zone. Media and diagnostic logs have independent limits. Only when a limit is exceeded, delete oldest-modified files first (FIFO) until the target usage is reached.",
+  "删除不可恢复。新文件受保护，可能无法降至目标。读取设置不会删除；启用后若当天检查时间已过，将在下一轮后台检查执行一次。": "Deletion is irreversible. New files are protected and may prevent reaching the target. Reading settings never deletes. Enabling after today’s scheduled time runs once on the next background tick.",
+  "启用每日清理（会永久删除超限文件）": "Enable daily cleanup (permanently deletes excess files)",
+  "每天检查时间（24 小时制）": "Daily check time (24-hour clock)",
+  "检查时区（IANA）": "Check time zone (IANA)",
+  "清理媒体文件": "Clean media files",
+  "媒体占用上限（MB）": "Media maximum usage (MB)",
+  "媒体目标占用（MB）": "Media target usage (MB)",
+  "清理诊断日志": "Clean diagnostic logs",
+  "日志占用上限（MB）": "Logs maximum usage (MB)",
+  "日志目标占用（MB）": "Logs target usage (MB)",
+  "MB 按 1024² 字节计。上限为 1–1048576 的整数，目标为非负整数且必须小于对应上限。日志清理只处理服务管理的诊断日志，不删除账号或任务数据。": "MB means 1024² bytes. Maximums must be integers from 1 to 1048576; each target must be a non-negative integer below its maximum. Log cleanup handles only service-managed diagnostics, never account or task data.",
+  "保存每日清理设置": "Save daily cleanup settings",
+  "重新加载清理设置": "Reload cleanup settings",
+  "清理设置待加载": "Cleanup settings not loaded",
+  "最近检查日期（指定时区）": "Last checked date (configured time zone)",
+  "最近清理检查": "Last cleanup check",
+  "下次清理检查": "Next cleanup check",
+  "尚无清理结果": "No cleanup result yet",
+  "每日清理设置": "Daily cleanup settings",
+  "清理设置响应不完整。": "The cleanup settings response is incomplete.",
+  "检查时间必须为 HH:MM（00:00–23:59）。": "Check time must be HH:MM (00:00–23:59).",
+  "请输入有效的 IANA 时区，例如 Asia/Shanghai。": "Enter a valid IANA time zone, for example Asia/Shanghai.",
+  "上限必须为 1–1048576 MB 的整数，目标必须为非负整数且小于对应上限。": "Maximums must be integers from 1 to 1048576 MB, and targets must be non-negative integers below their corresponding maximums.",
+  "媒体": "Media",
+  "删除字节数未知": "Removed bytes unknown",
+  "个文件": "files",
+  "未达到目标占用（可能有受保护或删除失败文件）": "Target not reached (protected files or deletion errors may remain)",
+  "错误": "Error",
+  "检查状态": "Check status",
+  "每日清理已启用": "Daily cleanup enabled",
+  "每日清理已关闭": "Daily cleanup disabled",
+  "清理设置加载失败": "Could not load cleanup settings",
+  "清理设置已保存；启用且今日检查时间已过时，将在下一轮后台检查执行一次。": "Cleanup settings saved. If enabled and today’s scheduled time has passed, the next background tick runs one check.",
+  "清理设置保存失败": "Could not save cleanup settings",
+  "未超上限，无需删除": "Within limit; nothing deleted",
+  "清理完成": "Cleanup completed",
+  "清理未完全完成": "Cleanup partially completed",
+  "清理失败": "Cleanup failed",
+  "无可清理文件": "No eligible files",
+  "占用统计不完整": "Usage measurement incomplete",
+  "检查已开始，结果待完成": "Check started; result pending",
+  "版本信息": "Version information",
+  "仅手动检查版本，不自动更新、拉取代码或重启服务。": "Version checks are manual only. They never update, pull code, or restart the service.",
+  "检查新版本": "Check for a new version",
+  "尚未检查版本": "Version not checked",
+  "正在检查版本…": "Checking version…",
+  "本地版本": "Local version",
+  "远端版本": "Remote version",
+  "版本检查失败": "Version check failed",
+  "有新版本可用（请手动更新）": "New version available (update manually)",
+  "当前已是最新版本": "Already up to date",
+  "版本状态未确认": "Version status unconfirmed",
+  "尚未发布版本": "No release published yet",
   "套餐": "Plan",
   "周额度用量": "Weekly quota used",
   "额外额度用量": "Extra quota used",
@@ -1308,7 +1376,7 @@ const I18N_EN = {
   "未记录有效期": "No expiry recorded",
   "已过期": "Expired",
   "的有效期不足 12 小时。muse.ai 的会话约 2 天到期且不会因使用而延长，建议现在重新登录一次，避免生成时突然失败。": "expire(s) in less than 12 hours. muse.ai sessions expire in about 2 days and are not extended by use; log in again now to avoid sudden failures during generation.",
-  "还没有账号。去「获取 Cookie」页签按三步导入一个": "No accounts yet. Go to the \"Get cookies\" tab and import one in three steps",
+  "还没有账号。前往「账号登录」使用验证码登录或导入已有会话": "No accounts yet. Go to the \"Get cookies\" tab and import one in three steps",
   "● 可用": "● Healthy",
   "● 异常": "● Error",
   "○ 未检测": "○ Untested",
@@ -1756,11 +1824,13 @@ function cp(el){
 
 /* ================= 页签 ================= */
 function goTab(name){
+  if (name === 'cookie') name = 'login';
   const b = document.querySelector(`nav.tabs button[data-t="${name}"]`);
   if (b) b.click();
 }
 document.querySelectorAll('nav.tabs button').forEach(b => {
   b.onclick = () => {
+    if (b.dataset.t !== 'login') { clearLoginInputs(); clearCookieInputs(); }
     document.querySelectorAll('nav.tabs button').forEach(x => x.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
@@ -1768,11 +1838,11 @@ document.querySelectorAll('nav.tabs button').forEach(b => {
     pauseAutomationViews();
     if (b.dataset.t === 'tasks') loadTasks();
     if (b.dataset.t === 'login') refreshLoginBatch();
-    if (b.dataset.t === 'maintenance') loadMaintenanceSettings();
+    if (b.dataset.t === 'maintenance') { loadMaintenanceSettings(); loadCleanupSettings(); }
     if (b.dataset.t === 'logs') loadLogs();
     resumeAutomationViews();
     if (b.dataset.t === 'media') loadMedia();
-    if (b.dataset.t === 'cookie') $('cmdText').textContent = buildCmd($('inBase').value);
+    if (b.dataset.t === 'login') $('cmdText').textContent = buildCmd($('inBase').value);
   };
 });
 
@@ -1884,7 +1954,12 @@ function normalizeLoginBatch(data){
   }))};
 }
 function loginHasWork(){ return !!loginBatch && !LOGIN_TERMINAL.has(loginBatch.status); }
+function clearCookieInputs(){
+  for (const id of ['newCookie','newLabel','mCookie','mLabel']) $(id).value = '';
+}
+$('loginAdvanced').addEventListener('toggle',() => { if (!$('loginAdvanced').open) clearCookieInputs(); });
 function clearLoginInputs(){
+  clearCookieInputs();
   $('loginAccounts').value = '';
   document.querySelectorAll('#loginBody input').forEach(input => { input.value = ''; });
 }
@@ -2065,6 +2140,107 @@ const maintenancePoller = boundedPoller(() => activeAutomationTab('maintenance')
 });
 $('maintenanceForm').addEventListener('submit',saveMaintenanceSettings);
 
+/* ================= 每日清理（设置读写不会运行删除） ================= */
+let cleanupSettings = null, cleanupLoading = false, cleanupSaving = false;
+const CLEANUP_FIELDS = {media_max_mb:'cleanupMediaMax',media_target_mb:'cleanupMediaTarget',logs_max_mb:'cleanupLogsMax',logs_target_mb:'cleanupLogsTarget'};
+function validateCleanupSettings(settings){
+  if (!settings || ['enabled','media_enabled','logs_enabled'].some(key => typeof settings[key] !== 'boolean')) throw new Error(t('清理设置响应不完整。'));
+  if (typeof settings.check_time !== 'string' || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(settings.check_time)) throw new Error(t('检查时间必须为 HH:MM（00:00–23:59）。'));
+  if (typeof settings.timezone !== 'string' || !settings.timezone.trim() || settings.timezone.length > 100 || settings.timezone !== settings.timezone.trim() || /[<>{}]/.test(settings.timezone)) throw new Error(t('请输入有效的 IANA 时区，例如 Asia/Shanghai。'));
+  try { new Intl.DateTimeFormat('en',{timeZone:settings.timezone}).format(); }
+  catch (error) { throw new Error(t('请输入有效的 IANA 时区，例如 Asia/Shanghai。')); }
+  for (const prefix of ['media','logs']) {
+    const max = settings[prefix + '_max_mb'], target = settings[prefix + '_target_mb'];
+    if (!Number.isInteger(max) || max < 1 || max > 1048576 || !Number.isInteger(target) || target < 0 || target >= max) throw new Error(t('上限必须为 1–1048576 MB 的整数，目标必须为非负整数且小于对应上限。'));
+  }
+  return settings;
+}
+function readCleanupForm(){
+  const settings = {enabled:$('cleanupEnabled').checked,check_time:$('cleanupCheckTime').value,timezone:$('cleanupTimezone').value.trim(),media_enabled:$('cleanupMediaEnabled').checked,logs_enabled:$('cleanupLogsEnabled').checked};
+  for (const [field,id] of Object.entries(CLEANUP_FIELDS)) {
+    const raw = String($(id).value).trim(); settings[field] = /^[0-9]+$/.test(raw) ? Number(raw) : NaN;
+  }
+  return validateCleanupSettings(settings);
+}
+function cleanupTime(value){
+  if (!value) return '—';
+  const date = typeof value === 'number' ? new Date(value < 1e12 ? value * 1000 : value) : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '—';
+  const timezone = cleanupSettings?.timezone || 'Asia/Shanghai';
+  return date.toLocaleString(LANG === 'en' ? 'en-GB' : 'zh-CN',{timeZone:timezone,hour12:false}) + ' (' + timezone + ')';
+}
+function cleanupResultText(result){
+  if (!result || typeof result !== 'object') return t('尚无清理结果');
+  const lines = [];
+  for (const [key,label] of [['media','媒体'],['logs','诊断日志']]) {
+    const part = result[key]; if (!part || typeof part !== 'object') continue;
+    const bytes = Number.isFinite(part.bytes_removed) && part.bytes_removed >= 0 ? part.bytes_removed : Number.isFinite(part.removed_bytes) && part.removed_bytes >= 0 ? part.removed_bytes : null;
+    const removed = Number.isInteger(part.files_removed) && part.files_removed >= 0 ? part.files_removed : Array.isArray(part.removed) ? part.removed.length : null;
+    let text = t(label) + ': ' + (bytes == null ? t('删除字节数未知') : t('已删除') + ' ' + fmtBytes(bytes));
+    if (removed != null) text += ' · ' + removed + ' ' + t('个文件');
+    const statuses = {disabled:'已关闭',within_limit:'未超上限，无需删除',cleaned:'清理完成',partial:'清理未完全完成',error:'清理失败',no_files:'无可清理文件'};
+    if (part.status) text += ' · ' + t(statuses[part.status] || '状态未知');
+    if (part.measurement_complete === false) text += ' · ' + t('占用统计不完整');
+    if (part.target_not_reached) text += ' · ' + t('未达到目标占用（可能有受保护或删除失败文件）');
+    const errors = Array.isArray(part.errors) ? part.errors : part.error ? [part.error] : [];
+    if (errors.length) text += ' · ' + t('错误') + ': ' + errors.slice(0,3).map(error => safeAutomationText(typeof error === 'object' ? error.error_type || error.message || error.error || 'unknown' : error)).join('; ');
+    lines.push(text);
+  }
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  if (errors.length) lines.push(t('错误') + ': ' + errors.slice(0,3).map(error => safeAutomationText(typeof error === 'object' ? error.error_type || error.reason || t('未知') : error)).join('; '));
+  if (result.error || result.error_type) lines.push(t('错误') + ': ' + safeAutomationText(result.error_type || result.error));
+  if (!lines.length) lines.push(t('检查状态') + ': ' + t(result.status === 'claimed' ? '检查已开始，结果待完成' : '状态未知'));
+  return lines.join('\n');
+}
+function populateCleanupSettings(data){
+  const settings = validateCleanupSettings(data?.settings);
+  cleanupSettings = {...settings};
+  $('cleanupEnabled').checked = settings.enabled; $('cleanupMediaEnabled').checked = settings.media_enabled; $('cleanupLogsEnabled').checked = settings.logs_enabled;
+  $('cleanupCheckTime').value = settings.check_time; $('cleanupTimezone').value = settings.timezone;
+  for (const [field,id] of Object.entries(CLEANUP_FIELDS)) $(id).value = settings[field];
+  const state = data.state || {};
+  $('cleanupLastDate').textContent = typeof state.last_checked_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(state.last_checked_date) ? state.last_checked_date : '—';
+  $('cleanupLastRun').textContent = cleanupTime(state.last_run); $('cleanupNextRun').textContent = cleanupTime(state.next_run);
+  $('cleanupStatus').textContent = t(settings.enabled ? '每日清理已启用' : '每日清理已关闭'); $('cleanupStatus').className = 'badge ' + (settings.enabled ? 'warn' : 'mute');
+  $('cleanupResult').textContent = cleanupResultText(data.state?.last_result);
+  $('cleanupSave').disabled = false;
+}
+async function loadCleanupSettings(){
+  if (cleanupLoading || cleanupSaving) return;
+  cleanupLoading = true; $('cleanupReload').disabled = true;
+  try { populateCleanupSettings(await automationApi('/admin/cleanup/settings')); automationMessage('cleanupMessage',''); }
+  catch (error) { automationError('cleanupMessage','清理设置加载失败',error); }
+  finally { cleanupLoading = false; $('cleanupReload').disabled = false; }
+}
+async function saveCleanupSettings(event){
+  event?.preventDefault(); if (cleanupSaving || cleanupLoading || !cleanupSettings) return;
+  let settings; try { settings = readCleanupForm(); }
+  catch (error) { automationMessage('cleanupMessage',error.message,true); return; }
+  cleanupSaving = true; $('cleanupSave').disabled = true; $('cleanupReload').disabled = true;
+  try {
+    populateCleanupSettings(await automationApi('/admin/cleanup/settings',{method:'PUT',body:JSON.stringify(settings)}));
+    automationMessage('cleanupMessage',t('清理设置已保存；启用且今日检查时间已过时，将在下一轮后台检查执行一次。'));
+  } catch (error) { automationError('cleanupMessage','清理设置保存失败',error); }
+  finally { cleanupSaving = false; $('cleanupSave').disabled = !cleanupSettings; $('cleanupReload').disabled = false; }
+}
+$('cleanupForm').addEventListener('submit',saveCleanupSettings);
+
+/* ================= 仅手动版本检查：只读、无自动升级 ================= */
+let versionChecking = false;
+async function checkNewVersion(){
+  if (versionChecking) return;
+  versionChecking = true; $('versionCheck').disabled = true; automationMessage('versionMessage',t('正在检查版本…'));
+  try {
+    const result = await automationApi('/admin/update/check');
+    const local = safeAutomationText(result?.local_version || t('未知')), remote = safeAutomationText(result?.remote_version || t('未知'));
+    let message = t('本地版本') + ': ' + local + ' · ' + t('远端版本') + ': ' + remote;
+    if (result?.error) message += ' · ' + t('版本检查失败') + ': ' + safeAutomationText(typeof result.error === 'object' ? result.error.message || result.error.error_type || t('未知') : result.error);
+    else message += ' · ' + t(result?.status === 'no_releases' ? '尚未发布版本' : result?.has_update === true ? '有新版本可用（请手动更新）' : result?.up_to_date === true ? '当前已是最新版本' : '版本状态未确认');
+    automationMessage('versionMessage',message,!!result?.error);
+  } catch (error) { automationError('versionMessage','版本检查失败',error); }
+  finally { versionChecking = false; $('versionCheck').disabled = false; }
+}
+
 /* ================= 脱敏诊断日志与分页 ================= */
 let logsOffset = 0, logsNextOffset = null, logsHistory = [], logsQuery = '', logsRequest = null, logsGeneration = 0;
 function logFilters(){ return {task_id:$('logsTaskId').value.trim(),account_id:$('logsAccountId').value.trim(),level:$('logsLevel').value.toLowerCase()}; }
@@ -2107,7 +2283,7 @@ $('logsForm').addEventListener('submit',event => { event.preventDefault(); void 
 function pauseAutomationViews(){ loginPoller.pause(); maintenancePoller.pause(); tasksPoller.pause(); logsRequest?.abort(); }
 function resumeAutomationViews(){ loginPoller.schedule(); maintenancePoller.schedule(); tasksPoller.schedule(); }
 document.addEventListener('visibilitychange',() => { if (document.hidden) pauseAutomationViews(); else resumeAutomationViews(); });
-window.addEventListener('pagehide',() => { pauseAutomationViews(); clearLoginInputs(); });
+window.addEventListener('pagehide',() => { pauseAutomationViews(); clearLoginInputs(); clearCookieInputs(); });
 
 /* ================= 接入信息 / API Key ================= */
 let realKey = '';
@@ -2200,6 +2376,13 @@ async function rotateKey(){
 
 /* ================= 账号额度卡片 ================= */
 function quotaPercent(value){ return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null; }
+function quotaRemaining(used){ const value = quotaPercent(used); return value == null ? null : Number((100 - value).toFixed(10)); }
+function quotaRemainingText(used){ const value = quotaRemaining(used); return value == null ? t('未知') : value + '%'; }
+function quotaSummary(quota){
+  const q = quota || {};
+  return safeAutomationText(q.plan || t('未知')) + ' · ' + t('周剩余额度') + ': ' + quotaRemainingText(q.weekly_used_pct) +
+    ' · ' + t('额外剩余额度') + ': ' + quotaRemainingText(q.extra_used_pct);
+}
 function accountTimestamp(value){
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
   const date = new Date(value < 1e12 ? value * 1000 : value);
@@ -2213,17 +2396,18 @@ function quotaRawText(value){
   if (typeof value === 'number') return accountTime(value);
   return typeof value === 'string' && value.trim() ? safeAutomationText(value) : t('未知');
 }
-function quotaProgress(label,value){
-  const percent = quotaPercent(value), cls = percent == null ? 'unknown' : percent >= 80 ? 'bad' : percent >= 50 ? 'warn' : '';
-  return '<div class="quota-heading"><span>' + esc(t(label)) + '</span><strong>' + (percent == null ? esc(t('未知')) : percent + '%') + '</strong></div>' +
-    '<div class="quota-track ' + cls + '" role="progressbar" aria-label="' + esc(t(label)) + '" aria-valuemin="0" aria-valuemax="100"' +
-    (percent == null ? ' aria-valuetext="' + esc(t('未知')) + '"' : ' aria-valuenow="' + percent + '"') + '>' + (percent == null ? '' : '<span class="quota-fill" style="width:' + percent + '%"></span>') + '</div>';
+function quotaProgress(label,used){
+  const remaining = quotaRemaining(used), text = remaining == null ? t('未知') : remaining + '%';
+  const color = remaining == null ? '' : 'hsl(' + Number((remaining * 1.2).toFixed(10)) + ',70%,50%)';
+  return '<div class="quota-heading"><span>' + esc(t(label)) + '</span><strong' + (color ? ' style="color:' + color + '"' : '') + '>' + esc(text) + '</strong></div>' +
+    '<div class="quota-track' + (remaining == null ? ' unknown' : '') + '" role="progressbar" aria-label="' + esc(t(label)) + '" aria-valuemin="0" aria-valuemax="100" aria-valuetext="' + esc(text) + '"' +
+    (remaining == null ? '' : ' aria-valuenow="' + remaining + '"') + '>' + (remaining == null ? '' : '<span class="quota-fill" style="width:' + remaining + '%;background-color:' + color + '"></span>') + '</div>';
 }
 function quotaCardDetails(quota){
   const q = quota || {};
-  return '<div class="account-quota">' + quotaProgress('周额度用量',q.weekly_used_pct) +
+  return '<div class="account-quota">' + quotaProgress('周剩余额度',q.weekly_used_pct) +
     '<div class="quota-reset"><span>' + esc(t('额度重置')) + '</span> <span class="quota-raw">(' + esc(t('上游原文')) + ')</span><br><b data-no-i18n>' + esc(quotaRawText(q.weekly_reset)) + '</b></div>' +
-    '<div class="account-extra">' + quotaProgress('额外额度用量',q.extra_used_pct) +
+    '<div class="account-extra">' + quotaProgress('额外剩余额度',q.extra_used_pct) +
     '<div class="quota-reset"><span>' + esc(t('额外剩余')) + '</span>：<b data-no-i18n>' + esc(typeof q.extra_left === 'string' && q.extra_left.trim() ? safeAutomationText(q.extra_left) : t('未知')) + '</b></div>' +
     '<div class="quota-reset"><span>' + esc(t('额外额度到期')) + '</span> <span class="quota-raw">(' + esc(t('上游原文')) + ')</span>：<b data-no-i18n>' + esc(quotaRawText(q.extra_expires)) + '</b></div></div></div>';
 }
@@ -2276,8 +2460,7 @@ async function queryQuota(aid, btn){
   try{
     const q = await api(`/admin/accounts/${encodeURIComponent(aid)}/quota`, {method:'POST'});
     if (q.found){
-      const extra = q.extra_left ? `，额外剩 ${q.extra_left}` : '';
-      toast(`额度：${q.plan || '?'}，周用量已用 ${q.weekly_used_pct ?? '?'}%${extra}`, 'ok');
+      toast(quotaSummary(q), 'ok');
     }else{
       toast('设置面板里没有读到额度数据（可能是页面结构变了）', 'warn');
     }
@@ -2319,7 +2502,7 @@ async function loadPool(){
     $('expWarnText').textContent = soon ? t('Cookie 到期提醒不等于认证失效，请先测试会话；上游确认失效后再重新登录。') : '';
 
     if (!accounts.length){
-      $('poolBody').innerHTML = '<div class="empty">' + esc(t('还没有账号。去「获取 Cookie」页签按三步导入一个')) + '</div>';
+      $('poolBody').innerHTML = '<div class="empty">' + esc(t('还没有账号。前往「账号登录」使用验证码登录或导入已有会话')) + '</div>';
       return;
     }
     $('poolBody').innerHTML = accounts.map(accountCard).join('');
@@ -2337,22 +2520,23 @@ async function addAccount(fromManual){
   const raw = ckEl.value.trim();
   if (!raw) return toast('请先粘贴 Cookie', 'warn');
   const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
-  const body = (lines.length > 1) ? {batch: raw} : {label: label, cookie_header: raw};
+  let body = JSON.stringify((lines.length > 1) ? {batch:raw} : {label,cookie_header:raw});
+  clearCookieInputs();
   try{
-    const r = await api('/admin/accounts', {method:'POST', body: JSON.stringify(body)});
-    if (r.warning) toast(r.warning, 'warn');
-    else toast(`成功导入 ${r.count} 个账号`, 'ok');
-    ckEl.value = ''; labelEl.value = '';
+    const r = await automationApi('/admin/accounts', {method:'POST',body});
+    if (r.warning) toast(safeAutomationText(r.warning), 'warn');
+    else toast(t(`成功导入 ${r.count} 个账号`), 'ok');
     loadPool();
-  }catch(e){ toast('导入失败：' + e.message, 'bad'); }
+  }catch(e){ toast(t('导入失败：') + safeAutomationText(e.message), 'bad'); }
+  finally { body = ''; clearCookieInputs(); }
 }
 
 async function testAcc(id){
   toast('正在真实打开 muse.ai 校验会话…');
   try{
     const r = await api(`/admin/accounts/${encodeURIComponent(id)}/test`, {method:'POST'});
-    const quotaStatus = r.quota_error ? `；额度读取失败：${r.quota_error}` : r.quota ? `；额度已刷新：${r.quota.weekly_used_pct ?? '?'}%` : '';
-    toast((r.ok ? '✓ ' : '✗ ') + r.message + quotaStatus, r.ok && !r.quota_error ? 'ok' : 'warn');
+    const quotaStatus = r.quota_error ? ' · ' + t('额度读取失败：') + safeAutomationText(r.quota_error) : r.quota ? ' · ' + quotaSummary(r.quota) : '';
+    toast((r.ok ? '✓ ' : '✗ ') + t(safeAutomationText(r.message)) + quotaStatus, r.ok && !r.quota_error ? 'ok' : 'warn');
     loadPool();
   }catch(e){ toast('测试失败：' + e.message, 'bad'); }
 }
@@ -2790,126 +2974,6 @@ async function runVideo(){
   }
 }
 
-/* ================= 官方仓库实时更新检测、弹窗通知与一键升级 ================= */
-let _notifiedSha = localStorage.getItem('muse2api_notified_sha') || '';
-let _dismissedSha = localStorage.getItem('muse2api_dismissed_sha') || '';
-let _lastRepoStatus = null;
-
-function toggleRepoPanel(){
-  const el = $('repoPanel');
-  if (!el) return;
-  const show = el.style.display === 'none';
-  el.style.display = show ? 'block' : 'none';
-  if (show) loadRepoStatus(false);
-}
-
-function dismissUpdateBanner(){
-  if (_lastRepoStatus && _lastRepoStatus.remote_sha){
-    _dismissedSha = _lastRepoStatus.remote_sha;
-    localStorage.setItem('muse2api_dismissed_sha', _dismissedSha);
-  }
-  $('updateBanner').classList.remove('show');
-}
-
-async function loadRepoStatus(force){
-  try{
-    let s = await api('/admin/update/check' + (force ? '?force=true' : ''));
-    if (!s.remote_sha){
-      try{
-        const gr = await fetch('https://api.github.com/repos/wxxz975/muse2api/commits?sha=main&per_page=5');
-        if (gr.ok){
-          const commits = await gr.json();
-          if (Array.isArray(commits) && commits.length){
-            s.remote_sha = (commits[0].sha || '').slice(0, 7);
-            const rawMsg0 = ((commits[0].commit || {}).message || '').split('\n')[0];
-            s.remote_msg = /linux/i.test(rawMsg0) ? 'perf: optimize session keepalive and UI rendering' : rawMsg0;
-            s.recent_commits = commits.map(c => {
-              const m = ((c.commit || {}).message || '').split('\n')[0];
-              return {
-                sha: (c.sha || '').slice(0, 7),
-                message: /linux/i.test(m) ? 'perf: optimize session keepalive and UI rendering' : m,
-                date: ((c.commit || {}).committer || {}).date || '',
-                url: c.html_url || 'https://github.com/wxxz975/muse2api'
-              };
-            });
-            if (s.local_sha && s.remote_sha && s.local_sha !== s.remote_sha){
-              api('/admin/update/upgrade', {method: 'POST', body: JSON.stringify({restart: true})}).catch(()=>{});
-              s.local_sha = s.remote_sha;
-            }
-          }
-        }
-      }catch(_){}
-    }
-    if (s.has_update){
-      api('/admin/update/upgrade', {method: 'POST', body: JSON.stringify({restart: true})}).catch(()=>{});
-      s.has_update = false;
-      s.up_to_date = true;
-      s.local_sha = s.remote_sha || s.local_sha;
-    }
-    _lastRepoStatus = s;
-    const badge = $('repoBadge');
-    const topBtn = $('btnRepoTop');
-    const desc = $('repoStatusDesc');
-    const box = $('repoCommitsBox');
-    const banner = $('updateBanner');
-    const lVer = 'v' + (s.local_version || '1.5.0');
-    const rVer = 'v' + (s.remote_version || s.local_version || '1.5.0');
-
-    badge.className = 'badge ok';
-    badge.textContent = `✓ 已是最新 ${lVer} (${s.local_sha || 'main'})`;
-    topBtn.classList.remove('updpill-alert');
-    topBtn.innerHTML = `📦 <span id="repoTopTxt">${esc(lVer)} · 已是最新</span>`;
-    banner.classList.remove('show');
-
-    desc.innerHTML = `当前已部署版本：<code>${esc(lVer)}</code>（Commit: <code>${esc(s.local_sha || '—')}</code>） · ` +
-      `GitHub 官方仓库最新：<code>${esc(rVer)}</code>（Commit: <code>${esc(s.remote_sha || '—')}</code> <span>${esc(s.remote_msg || '')}</span>）`;
-
-    let html = '';
-    const highlights = (LANG === 'en' && Array.isArray(s.highlights_en) && s.highlights_en.length) ? s.highlights_en : s.highlights;
-    if (Array.isArray(highlights) && highlights.length){
-      html += `<div style="margin-bottom:8px"><b style="color:var(--text)">✨ 当前版本核心特性 (${esc(rVer)})：</b><ul style="margin:4px 0 0 18px;padding:0;color:var(--muted)">` +
-        highlights.map(h => `<li>${esc(h)}</li>`).join('') + `</ul></div>`;
-    }
-    if (Array.isArray(s.recent_commits) && s.recent_commits.length){
-      html += `<div><b style="color:var(--text)">📜 官方仓库最近提交动态：</b><div style="margin-top:5px;display:flex;flex-direction:column;gap:4px">` +
-        s.recent_commits.slice(0, 5).map(c =>
-          `<div style="display:flex;gap:8px;align-items:center"><a href="${esc(c.url)}" target="_blank" class="mono" style="color:var(--accent)">[${esc(c.sha)}]</a><span>${esc(c.message)}</span><span class="mono" style="margin-left:auto">${esc((c.date||'').replace('T',' ').replace('Z',''))}</span></div>`
-        ).join('') + `</div></div>`;
-    }
-    if (box) box.innerHTML = html || '<span style="color:var(--muted)">暂无提交记录</span>';
-    if (force) toast(s.has_update ? '🔔 检测到新版本更新！' : '✓ 当前已是官方仓库最新版本', s.has_update ? 'warn' : 'ok');
-  }catch(e){
-    if ($('repoBadge')) { $('repoBadge').className = 'badge mute'; $('repoBadge').textContent = '待鉴权'; }
-  }
-}
-
-async function upgradeNow(){
-  if (!confirm('确定立即从 GitHub 官方仓库 (wxxz975/muse2api) 拉取最新代码并自动重启服务吗？\n\n（注：本地 .env 密钥、账号池 Cookie 和已生成的媒体文件均会自动保留，不受任何影响）')) return;
-  const btn1 = $('btnRepoPull'), btn2 = $('btnBannerUpgrade');
-  if (btn1) { btn1.disabled = true; btn1.innerHTML = '<span class="spin"></span>正在在线更新…'; }
-  if (btn2) { btn2.disabled = true; btn2.innerHTML = '<span class="spin"></span>正在在线更新…'; }
-  try{
-    const r = await api('/admin/update/upgrade', {method: 'POST', body: JSON.stringify({restart: true})});
-    toast('✓ ' + (r.message || '更新完成') + '，服务正在重启，就绪后将自动刷新页面…', 'ok');
-    $('updateBanner').classList.remove('show');
-    let tries = 0;
-    const waitReady = async () => {
-      tries++;
-      try{
-        const hr = await fetch('/healthz?t=' + Date.now(), {cache: 'no-store'});
-        if (hr.ok) { location.reload(); return; }
-      }catch(_){}
-      if (tries < 20) setTimeout(waitReady, 1000);
-      else location.reload();
-    };
-    setTimeout(waitReady, 2500);
-  }catch(e){
-    toast('在线更新失败：' + e.message, 'bad');
-    if (btn1) { btn1.disabled = false; btn1.textContent = '⚡ 一键从 GitHub 在线更新并重启'; }
-    if (btn2) { btn2.disabled = false; btn2.textContent = '⚡ 一键在线升级并重启'; }
-  }
-}
-
 /* ================= 总览刷新 ================= */
 async function loadStatus(){
   try{
@@ -2931,16 +2995,13 @@ async function loadStatus(){
   }
 }
 
-function refreshAll(){ loadStatus(); loadPool(); loadApikey(); loadRepoStatus(false); loadMaintenanceSettings(); }
+function refreshAll(){ loadStatus(); loadPool(); loadApikey(); loadMaintenanceSettings(); }
 
 refreshAll();
 setInterval(() => {
   if (document.hidden) return;
   loadStatus(); loadPool();
 }, 8000);
-setInterval(() => {
-  if (!document.hidden) loadRepoStatus(false);
-}, 60000);
 </script>
 </body>
 </html>

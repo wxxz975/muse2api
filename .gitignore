@@ -33,6 +33,9 @@ wheels/
 data/accounts.json
 data/tasks.json
 data/maintenance.json
+data/cleanup.json
+data/cleanup-state.json
+data/cleanup-state.json.lock
 data/accounts.pre-dedup-*.json
 data/diagnostics*
 .work/

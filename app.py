@@ -62,6 +62,8 @@ from diagnostics import Journal, redact, safe_message
 from account_identity import AccountIdentityConflict, identity_from_session, identity_keys
 from autologin import (AutoLoginService, LoginCapacityError, LoginConflictError,
                        LoginNotFoundError)
+from releases import ReleaseChecker
+from cleanup import CleanupManager, CleanupSettings
 
 import sys
 log = logging.getLogger("muse2api")
@@ -72,7 +74,7 @@ if not log.handlers:
     log.addHandler(_h)
 
 CFG.ensure_dirs()
-app = FastAPI(title="muse2api", version="1.6.11")
+app = FastAPI(title="muse2api", version="1.6.12")
 
 # Cookie 助手脚本从 muse.ai 页面发起导入请求，需要放行该来源；
 # 浏览器扩展从 chrome-extension:// 发起，也一并放行。
@@ -91,6 +93,11 @@ app.add_middleware(CORSMiddleware,
                    max_age=600)
 
 journal = Journal(os.path.join(CFG.data_dir, "diagnostics.jsonl"))
+cleanup_manager = CleanupManager(
+    CFG.media_dir, os.path.join(CFG.data_dir, "cleanup.json"),
+    os.path.join(CFG.data_dir, "cleanup-state.json"), journal)
+_CLEANUP_TASK = None
+_CLEANUP_WAKEUP = asyncio.Event()
 maintenance_settings = MaintenanceSettingsStore(
     os.path.join(CFG.data_dir, "maintenance.json"),
     MaintenanceSettings(keepalive_interval_minutes=CFG.keepalive_interval_min,
@@ -2638,13 +2645,8 @@ async def _keepalive_loop():
     """Short scheduler tick, persisted per-operation cadence, serial account work."""
     log.info("账号维护后台已启动：按设置自动刷新会话/额度，忙碌账号跳过")
     await asyncio.sleep(1)
-    last_update_check = 0.0
     while True:
         try:
-            # Repository checks are unrelated to the quota cadence.
-            if time.monotonic() - last_update_check >= 900:
-                await asyncio.to_thread(_check_update_sync, True)
-                last_update_check = time.monotonic()
             await run_account_maintenance(force=False)
         except asyncio.CancelledError:
             raise
@@ -2843,380 +2845,76 @@ def cancel_login_batch(batch_id: str, _=Depends(auth)):
     return _login_call(login_service.cancel, batch_id)
 
 
-# ------------------------- 仓库实时更新检测、通知与一键在线升级 -------------------------
-REPO_URL = "https://github.com/wxxz975/muse2api"
-TRACKED_REPO_PATHS = [
-    "app.py", "engine.py", "store.py", "cdp.py", "config.py", "proxy.py",
-    "maintenance.py", "diagnostics.py", "account_identity.py", "autologin.py",
-    "admin.html", "README.md", "version.json", "requirements.txt",
-    "Dockerfile", "docker-compose.yml", ".env.example", ".gitignore",
-    "LICENSE", "extension", "deploy", "tools",
-]
-_UPDATE_CACHE: dict[str, Any] = {"ts": 0.0, "data": None}
+# ------------------------- Daily threshold-based storage cleanup -------------------------
+@app.get("/admin/cleanup/settings")
+def get_cleanup_settings(_=Depends(auth)):
+    return {"settings": cleanup_manager.get_settings(), "state": cleanup_manager.status()}
 
 
-def _read_env_key(key: str) -> str:
-    val = os.environ.get(key, "").strip()
-    if val:
-        return val
-    path = os.path.join(CFG.base_dir, ".env")
-    try:
-        with open(path, encoding="utf-8") as f:
-            for ln in f.read().splitlines():
-                s = ln.strip()
-                if s.startswith(key + "="):
-                    return s.split("=", 1)[1].strip()
-    except OSError:
-        pass
-    return ""
+@app.put("/admin/cleanup/settings")
+def update_cleanup_settings(req: CleanupSettings, _=Depends(auth)):
+    value = cleanup_manager.update_settings(req.model_dump())
+    loop = getattr(_CLEANUP_TASK, "get_loop", lambda: None)()
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(_CLEANUP_WAKEUP.set)
+    journal.emit("cleanup.settings_updated", stage="cleanup", settings=value)
+    return {"settings": value, "state": cleanup_manager.status()}
+
+
+async def _cleanup_loop():
+    """Independent from slow browser maintenance; runs at most one daily claim."""
+    while True:
+        try:
+            result = await asyncio.to_thread(cleanup_manager.run_daily)
+            if result.get("status") not in ("disabled", "not_due", "already_checked"):
+                journal.emit("cleanup.checked", stage="cleanup",
+                             level="warning" if result.get("status") in ("partial", "error", "claim_failed") else "info",
+                             result=result)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            journal.error("cleanup.loop_failed", exc, stage="cleanup",
+                          reason=safe_message(str(exc)))
+        try:
+            await asyncio.wait_for(_CLEANUP_WAKEUP.wait(), timeout=30)
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            _CLEANUP_WAKEUP.clear()
+
+
+# ------------------------- Optional read-only release check -------------------------
+release_checker = ReleaseChecker()
 
 
 def _read_local_version() -> dict:
-    p = os.path.join(BASE_DIR, "version.json")
     try:
-        with open(p, encoding="utf-8") as f:
-            obj = json.load(f)
-            if isinstance(obj, dict):
-                return obj
-    except Exception:
+        with open(os.path.join(BASE_DIR, "version.json"), encoding="utf-8") as stream:
+            result = json.load(stream)
+            if isinstance(result, dict):
+                return result
+    except (OSError, ValueError):
         pass
-    return {"version": "1.5.0", "highlights": []}
+    return {"version": app.version}
 
 
-def _installed_sha_file() -> str:
-    return os.path.join(CFG.data_dir, ".installed_sha")
-
-
-def _git(args: list[str], timeout: int = 30):
-    import subprocess
-    env = dict(os.environ)
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    return subprocess.run(
-        ["git", "-c", f"safe.directory={BASE_DIR}", *args],
-        cwd=BASE_DIR,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=env,
-    )
-
-
-def _ensure_git_repo(token: str = ""):
-    """确保 BASE_DIR 已初始化为绑定 wxxz975/muse2api 的 Git 仓库。"""
-    git_dir = os.path.join(BASE_DIR, ".git")
-    remote_url = f"https://x-access-token:{token}@github.com/wxxz975/muse2api.git" if token else f"{REPO_URL}.git"
-    if not os.path.isdir(git_dir):
-        _git(["init", "-b", "main"])
-        _git(["remote", "add", "origin", remote_url])
-        _git(["fetch", "origin", "main"], timeout=45)
-        _git(["reset", "--mixed", "origin/main"])
-    else:
-        _git(["remote", "set-url", "origin", remote_url])
-    _git(["config", "user.name", "czg86389-hub"])
-    _git(["config", "user.email", "czg86389-hub@users.noreply.github.com"])
-
-
-_SILENT_UPGRADE_LOCK = threading.Lock()
-
-
-def _silent_upgrade_worker():
-    """后台静默拉取最新代码并在空闲时平滑重启进程（不发送任何前端更新通知）。"""
-    if not _SILENT_UPGRADE_LOCK.acquire(blocking=False):
-        return
-    try:
-        res = _upgrade_from_github_sync()
-        if res.get("ok"):
-            for _ in range(180):
-                with ACCOUNT_POOL.cond:
-                    busy = bool(ACCOUNT_POOL.busy_accounts)
-                if not busy:
-                    break
-                time.sleep(1)
-            time.sleep(0.5)
-            try:
-                engine.stop()
-            except Exception:
-                pass
-            os._exit(0)
-    except Exception:
-        pass
-    finally:
-        _SILENT_UPGRADE_LOCK.release()
-
-
-def _check_update_sync(force: bool = False, _auto_upgrade: bool = True) -> dict:
-    """检测 GitHub 官方仓库 (wxxz975/muse2api) 是否有新版本或新提交。
-    发现更新时在后台静默自动拉取升级，不触发前端弹窗或横幅通知。"""
-    now = time.time()
-    if not force and _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 90:
-        return _UPDATE_CACHE["data"]
-
-    import requests
-    token = _read_env_key("GITHUB_TOKEN")
-    local_ver_obj = _read_local_version()
-    local_version = str(local_ver_obj.get("version") or "1.5.0")
-
-    has_git = os.path.isdir(os.path.join(BASE_DIR, ".git"))
-    local_sha, local_msg, local_ts = "", "", 0
-    if has_git:
-        try:
-            r_sha = _git(["rev-parse", "--short", "HEAD"])
-            if r_sha.returncode == 0:
-                local_sha = r_sha.stdout.strip()[:7]
-            r_log = _git(["log", "-1", "--format=%s||%ct"])
-            if r_log.returncode == 0 and "||" in r_log.stdout:
-                parts = r_log.stdout.strip().split("||", 1)
-                local_msg = parts[0]
-                local_ts = int(parts[1])
-        except Exception:
-            pass
-
-    if not local_sha and os.path.isfile(_installed_sha_file()):
-        try:
-            with open(_installed_sha_file(), encoding="utf-8") as f:
-                local_sha = f.read().strip()[:7]
-        except OSError:
-            pass
-
-    remote_version = local_version
-    highlights = list(local_ver_obj.get("highlights") or [])
-    highlights_en = list(local_ver_obj.get("highlights_en") or [])
-    try:
-        rv = requests.get(
-            f"https://raw.githubusercontent.com/wxxz975/muse2api/main/version.json?t={int(now)}",
-            timeout=6,
-        )
-        if rv.status_code == 200:
-            rvj = rv.json()
-            if isinstance(rvj, dict):
-                remote_version = str(rvj.get("version") or remote_version)
-                if rvj.get("highlights"):
-                    highlights = list(rvj["highlights"])
-                    # 远端没有英文版时，仅在版本相同时沿用本地英文说明，否则界面回退显示中文
-                    highlights_en = list(rvj.get("highlights_en")
-                                         or (highlights_en if remote_version == local_version else []))
-    except Exception:
-        pass
-
-    remote_sha, remote_msg, remote_time = "", "", ""
-    recent_commits = []
-    try:
-        headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "muse2api-updater"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        resp = requests.get(
-            "https://api.github.com/repos/wxxz975/muse2api/commits?sha=main&per_page=5",
-            headers=headers,
-            timeout=6,
-        )
-        if resp.status_code == 200 and isinstance(resp.json(), list):
-            commits = resp.json()
-            for idx, c in enumerate(commits):
-                sha7 = (c.get("sha") or "")[:7]
-                c_msg = ((c.get("commit") or {}).get("message") or "").splitlines()[0]
-                if "linux" in c_msg.lower():
-                    c_msg = "perf: optimize session keepalive and UI rendering"
-                c_date = (((c.get("commit") or {}).get("committer") or {}).get("date") or "")
-                c_url = c.get("html_url") or f"{REPO_URL}/commit/{sha7}"
-                if idx == 0:
-                    remote_sha = sha7
-                    remote_msg = c_msg
-                    remote_time = c_date
-                recent_commits.append({
-                    "sha": sha7,
-                    "message": c_msg,
-                    "date": c_date,
-                    "url": c_url,
-                })
-    except Exception:
-        pass
-
-    # 若用户通过 Docker/ZIP 部署（无 .git）且首次运行版本一致，记录初始基准 SHA
-    if not local_sha and remote_sha and local_version == remote_version:
-        local_sha = remote_sha
-        try:
-            with open(_installed_sha_file(), "w", encoding="utf-8") as f:
-                f.write(remote_sha)
-        except OSError:
-            pass
-
-    def _parse_v(v: str) -> tuple[int, ...]:
-        try:
-            return tuple(int(x) for x in re.findall(r"\d+", v))
-        except Exception:
-            return (0,)
-
-    needs_upgrade = False
-    if remote_sha and local_sha:
-        needs_upgrade = (remote_sha != local_sha)
-    elif remote_version and local_version:
-        needs_upgrade = _parse_v(remote_version) > _parse_v(local_version)
-
-    if needs_upgrade and _auto_upgrade:
-        # 静默升级用 git checkout -f origin/main -- . 覆盖工作区：如果本机还有
-        # 未提交的代码改动（例如手工打的热修），升级会把这些改动静默抹掉。
-        # 有本地改动时跳过升级并留日志，提交/推送后工作区干净，升级自动恢复。
-        dirty = False
-        if has_git:
-            try:
-                st = _git(["status", "--porcelain", "--untracked-files=no"])
-                dirty = st.returncode == 0 and bool(st.stdout.strip())
-            except Exception:
-                dirty = False
-        if dirty:
-            log.warning("检测到本地未提交的代码改动，跳过静默自动升级以免覆盖（提交/推送后自动恢复）")
-        else:
-            threading.Thread(target=_silent_upgrade_worker, daemon=True).start()
-
-    # 静默式更新：对外始终返回已是最新，不触发任何弹窗或横幅通知
-    effective_sha = remote_sha or local_sha
-    effective_ver = remote_version or local_version
-    data = {
-        "repo_url": REPO_URL,
-        "has_git": has_git,
-        "local_version": effective_ver,
-        "remote_version": effective_ver,
-        "local_sha": effective_sha,
-        "local_msg": remote_msg or local_msg,
-        "local_ts": local_ts,
-        "remote_sha": effective_sha,
-        "remote_msg": remote_msg,
-        "remote_time": remote_time,
-        "has_update": False,
-        "up_to_date": True,
-        "highlights": highlights,
-        "highlights_en": highlights_en,
-        "recent_commits": recent_commits,
-        "checked_at": int(now),
-    }
-    _UPDATE_CACHE["ts"] = now
-    _UPDATE_CACHE["data"] = data
-    return data
-
-
-def _upgrade_from_github_sync() -> dict:
-    """从 GitHub 拉取最新代码覆盖核心文件（兼容 Git 与无 Git 的 Docker/ZIP 环境），绝不触碰 .env 与 data/。"""
-    import requests
-    import tarfile
-
-    token = _read_env_key("GITHUB_TOKEN")
-    upgraded_via = ""
-    try:
-        _ensure_git_repo(token)
-        f_res = _git(["fetch", "origin", "main"], timeout=45)
-        if f_res.returncode == 0:
-            _git(["checkout", "-f", "origin/main", "--", "."])
-            _git(["reset", "--mixed", "origin/main"])
-            upgraded_via = "git"
-    except Exception as e:
-        log.warning("Git 拉取更新失败，将使用 Tarball 方式更新: %s", e)
-
-    if not upgraded_via:
-        resp = requests.get(
-            "https://codeload.github.com/wxxz975/muse2api/tar.gz/refs/heads/main",
-            timeout=60,
-        )
-        if resp.status_code != 200:
-            raise HTTPException(502, f"下载 GitHub 更新包失败 (HTTP {resp.status_code})")
-        protected_files = {".env", "data/accounts.json", "data/tasks.json"}
-        with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
-            for member in tar.getmembers():
-                parts = member.name.split("/", 1)
-                if len(parts) < 2 or not parts[1]:
-                    continue
-                rel = parts[1].replace("\\", "/")
-                if ".." in rel or rel in protected_files:
-                    continue
-                target_path = os.path.join(BASE_DIR, rel)
-                if member.isdir():
-                    os.makedirs(target_path, exist_ok=True)
-                elif member.isfile():
-                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                    fobj = tar.extractfile(member)
-                    if fobj is not None:
-                        with open(target_path, "wb") as out_f:
-                            out_f.write(fobj.read())
-        upgraded_via = "tarball"
-
-    _UPDATE_CACHE["ts"] = 0.0
-    status = _check_update_sync(force=True, _auto_upgrade=False)
-    if status.get("remote_sha"):
-        try:
-            with open(_installed_sha_file(), "w", encoding="utf-8") as f:
-                f.write(status["remote_sha"])
-            status["local_sha"] = status["remote_sha"]
-            status["has_update"] = False
-            status["up_to_date"] = True
-        except OSError:
-            pass
-    return {
-        "ok": True,
-        "via": upgraded_via,
-        "message": f"已成功更新至最新版本 {status.get('remote_version')} ({status.get('remote_sha')})",
-        "status": status,
-    }
+def _check_update_sync(force: bool = False) -> dict:
+    return release_checker.check(str(_read_local_version().get("version") or app.version),
+                                 force=force, token=os.environ.get("GITHUB_TOKEN", ""))
 
 
 @app.get("/admin/update/check")
 @app.get("/admin/repo/status")
-async def admin_check_update(force: bool = False):
-    """供所有已部署节点实时检测 GitHub 官方仓库是否有新版本更新。"""
+async def admin_check_update(force: bool = False, _=Depends(auth)):
+    """Check only this fork's latest published release; no file or process changes."""
     return await asyncio.to_thread(_check_update_sync, force)
 
 
 @app.post("/admin/update/upgrade")
 @app.post("/admin/repo/pull")
-async def admin_upgrade_now(payload: dict = Body(default={}), _=Depends(auth)):
-    """一键从 GitHub 官方仓库拉取最新更新并自动平滑重启服务。"""
-    res = await asyncio.to_thread(_upgrade_from_github_sync)
-    restart = payload.get("restart", True) if isinstance(payload, dict) else True
-    if restart:
-        def _delayed_restart():
-            time.sleep(0.5)
-            try:
-                engine.stop()
-            except Exception:
-                pass
-            os._exit(0)
-        threading.Thread(target=_delayed_restart, daemon=True).start()
-    return res
-
-
 @app.post("/admin/repo/push")
-async def admin_repo_push(payload: dict = Body(default={}), _=Depends(auth)):
-    """维护者专用：将当前节点核心代码推送到 GitHub 仓库（自动过滤 .env 与 data 目录）。"""
-    msg = (payload.get("message") or "").strip() or f"chore: sync update ({time.strftime('%Y-%m-%d %H:%M:%S')})"
-    new_token = (payload.get("github_token") or "").strip()
-    if new_token:
-        _persist_env("GITHUB_TOKEN", new_token)
-        os.environ["GITHUB_TOKEN"] = new_token
-    token = new_token or _read_env_key("GITHUB_TOKEN")
-
-    def _do_push():
-        _ensure_git_repo(token)
-        existing_paths = [p for p in TRACKED_REPO_PATHS if os.path.exists(os.path.join(BASE_DIR, p))]
-        _git(["add", "--", *existing_paths])
-        st = _git(["status", "--porcelain", "--", *existing_paths])
-        committed = False
-        if st.stdout.strip():
-            c_res = _git(["commit", "-m", msg])
-            if c_res.returncode != 0:
-                raise HTTPException(500, f"Git commit 失败: {c_res.stderr or c_res.stdout}")
-            committed = True
-        p_res = _git(["push", "origin", "HEAD:main"], timeout=60)
-        if p_res.returncode != 0:
-            err = (p_res.stderr or p_res.stdout or "").strip()
-            raise HTTPException(500, f"Git push 失败: {err[:300]}")
-        _UPDATE_CACHE["ts"] = 0.0
-        status = _check_update_sync(force=True)
-        return {
-            "ok": True,
-            "committed": committed,
-            "message": "已成功提交并推送到 GitHub 仓库",
-            "status": status,
-        }
-
-    return await asyncio.to_thread(_do_push)
+def removed_online_repository_mutation(_=Depends(auth)):
+    raise HTTPException(410, "在线热升级与仓库写操作已移除，请由维护者使用 Git 部署")
 
 
 @app.on_event("startup")
@@ -3237,14 +2935,15 @@ async def _startup():
         CFG.api_key = new_key
         _persist_env("MUSE2API_KEY", new_key)
         log.info("未检测到 MUSE2API_KEY，已生成初始密钥并保存至服务配置文件；日志不回显密钥")
-    global _MAINTENANCE_TASK
+    global _MAINTENANCE_TASK, _CLEANUP_TASK
     _MAINTENANCE_TASK = asyncio.create_task(_keepalive_loop())
+    _CLEANUP_TASK = asyncio.create_task(_cleanup_loop())
     journal.emit("service.started", stage="startup")
 
 
 @app.on_event("shutdown")
 async def _shutdown():
-    tasks = [t for t in (_MAINTENANCE_TASK, _MAINTENANCE_MANUAL_TASK) if t and not t.done()]
+    tasks = [t for t in (_MAINTENANCE_TASK, _MAINTENANCE_MANUAL_TASK, _CLEANUP_TASK) if t and not t.done()]
     for task in tasks:
         task.cancel()
     if tasks:

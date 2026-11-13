@@ -26,10 +26,12 @@ const cardsSource = section('/* ================= 账号额度卡片 ===========
 const poolLoadSource = section('async function loadPool(){','async function addAccount(');
 const settings = {keepalive_enabled:true,keepalive_interval_minutes:30,quota_enabled:true,quota_interval_minutes:60,include_disabled:false};
 const state = {running:false,last_run:1794558000,next_run:1794561600,last_keepalive_at:1794557000,last_quota_at:1794557100,last_result:{ok:true}};
+const cleanupDefaults = {enabled:false,check_time:'03:00',timezone:'Asia/Shanghai',media_enabled:true,media_max_mb:10240,media_target_mb:8192,logs_enabled:true,logs_max_mb:100,logs_target_mb:80};
+const cleanupState = {last_checked_date:null,last_run:null,last_result:null,next_run:null};
 const fixtureBatch = status => ({id:'fixture-batch',status,items:[{index:0,account:'u***@example.com',label:'Fixture',status:status==='completed'?'succeeded':'waiting_otp',stage:'waiting_otp'}]});
 
 if (process.argv.includes('--serve')) {
-  let saved = {...settings}, batch = null, checks = 0;
+  let saved = {...settings}, cleanupSaved = {...cleanupDefaults}, batch = null, checks = 0;
   const server = createServer(async (req,res) => {
     const url = new URL(req.url,'http://127.0.0.1');
     res.setHeader('Cache-Control','no-store');
@@ -40,6 +42,7 @@ if (process.argv.includes('--serve')) {
     let body;try {body=JSON.parse(raw||'{}');} catch {res.statusCode=400;res.end('{}');return;}
     let data = {};
     if (url.pathname==='/admin/maintenance/settings') {if(req.method==='PUT')saved=body;data={settings:saved,state};}
+    else if (url.pathname==='/admin/cleanup/settings') {if(req.method==='PUT')cleanupSaved=body;data={settings:cleanupSaved,state:cleanupState};}
     else if (url.pathname==='/admin/maintenance/run') {res.statusCode=202;checks=2;data={status:'queued'};}
     else if (url.pathname==='/admin/keepalive/status') data={settings:saved,...state,running:checks-->0};
     else if (url.pathname==='/admin/login/batches' && req.method==='POST') {batch=fixtureBatch('running');res.statusCode=202;data=batch;}
@@ -118,6 +121,7 @@ if (process.argv.includes('--serve')) {
     context.window={...context.window,alert(){},confirm(){return true;},prompt(){return null;}};
     base.setRespond(async path=>{
       if(path==='/admin/maintenance/settings')return {settings,state};
+      if(path==='/admin/cleanup/settings')return {settings:cleanupDefaults,state:cleanupState};
       if(path==='/admin/status')return {browser_running:false,media_count:0};
       if(path==='/admin/accounts')return {accounts:[],stats:{total:0}};
       if(path==='/admin/apikey')return {api_key:'fixture-key',base_url:'http://fixture.invalid/v1'};
@@ -148,11 +152,11 @@ if (process.argv.includes('--serve')) {
   });
   await test('account cards contain real plan, reset text, quota progress and all eight actions without table layout',()=>{
     const h=harness(), account={id:'card-1',label:'Main',enabled:true,ok:true,essential_ok:true,cookie_count:4,expires_at:state.last_run,last_used:state.last_run-500,last_keepalive:state.last_run-100,quota:{plan:'Free plan',weekly_used_pct:12.5,weekly_reset:'10月30日',extra_used_pct:0,extra_left:'2B tokens left',extra_expires:'never',checked_at:state.last_run}};
-    const body=h.elements.get('poolBody');body.innerHTML=h.context.accountCard(account);assert.equal(body.querySelectorAll('article').length,1);assert.equal(body.querySelectorAll('tr').length,0);assert.match(body.textContent,/Free plan/);assert.match(body.textContent,/12.5%/);assert.match(body.textContent,/10月30日/);assert.match(body.textContent,/2B tokens left/);assert.match(body.textContent,/Asia\/Shanghai/);assert.equal(body.querySelectorAll('button[data-account-action]').length,8);assert.equal(body.querySelector('div[role="progressbar"]').getAttribute('aria-valuenow'),'12.5');assert.doesNotMatch(body.innerHTML,/onclick=|reset-quota|credit-toggle/);assert.match(html,/repeat\(auto-fill,minmax\(min\(100%,350px\),1fr\)\)/);
+    const body=h.elements.get('poolBody');body.innerHTML=h.context.accountCard(account);assert.equal(body.querySelectorAll('article').length,1);assert.equal(body.querySelectorAll('tr').length,0);assert.match(body.textContent,/Free plan/);assert.match(body.textContent,/87.5%/);assert.match(body.textContent,/10月30日/);assert.match(body.textContent,/2B tokens left/);assert.match(body.textContent,/Asia\/Shanghai/);assert.equal(body.querySelectorAll('button[data-account-action]').length,8);assert.equal(body.querySelector('div[role="progressbar"]').getAttribute('aria-valuenow'),'87.5');assert.doesNotMatch(body.innerHTML,/onclick=|reset-quota|credit-toggle/);assert.match(html,/repeat\(auto-fill,minmax\(min\(100%,350px\),1fr\)\)/);
   });
   await test('unknown quota is never zero, invalid percentages cannot enter CSS, and raw reset strings never acquire a guessed date',()=>{
     const h=harness();for(const value of [undefined,null,'50',NaN,Infinity,-1,101,'0%;background:url(evil)']){assert.equal(h.context.quotaPercent(value),null);const output=h.context.quotaProgress('周额度用量',value);assert.match(output,/未知/);assert.doesNotMatch(output,/aria-valuenow|50%|background:url/);}
-    assert.equal(h.context.quotaPercent(0),0);assert.equal(h.context.quotaPercent(100),100);assert.match(h.context.quotaProgress('周额度用量',100),/quota-track bad/);assert.equal(h.context.quotaRawText('Sep 30'),'Sep 30');assert.equal(h.context.quotaRawText('2026-10-30'),'2026-10-30');assert.match(h.context.quotaRawText(state.last_run),/Asia\/Shanghai/);assert.equal(h.context.accountTime('Sep 30'),'未知');
+    assert.equal(h.context.quotaPercent(0),0);assert.equal(h.context.quotaPercent(100),100);assert.match(h.context.quotaProgress('周剩余额度',100),/hsl\(0,70%,50%\)/);assert.equal(h.context.quotaRawText('Sep 30'),'Sep 30');assert.equal(h.context.quotaRawText('2026-10-30'),'2026-10-30');assert.match(h.context.quotaRawText(state.last_run),/Asia\/Shanghai/);assert.equal(h.context.accountTime('Sep 30'),'未知');
     const output=h.context.accountCard({id:'unknown',enabled:false,quota:{}});assert.match(output,/未知/);assert.doesNotMatch(output,/0%|倒计时|remaining days/);
   });
   await test('account card fields and proxy metadata escape XSS, redact credentials, and retain old quota on error',()=>{
@@ -167,8 +171,8 @@ if (process.argv.includes('--serve')) {
   });
   await test('account API renders cards, business timestamp is not changed by a quota snapshot refresh, and cards translate',async()=>{
     const h=harness('en');h.run(poolLoadSource);const account={id:'account-1',label:'Account',enabled:true,ok:true,last_used:state.last_run,quota:{plan:'Free plan',weekly_used_pct:15,weekly_reset:'Sep 30',checked_at:state.last_run+1000}};
-    h.setRespond(async()=>({accounts:[account],stats:{total:1,healthy:1}}));await h.context.loadPool();assert.equal(h.elements.get('poolBody').querySelectorAll('article').length,1);assert.match(h.elements.get('poolBody').textContent,/Last generation use/);assert.match(h.elements.get('poolBody').textContent,/Weekly quota used/);assert.equal(h.run('accounts[0].last_used'),state.last_run);
-    for(const copy of ['套餐','周额度用量','额度重置','额外额度用量','额外剩余','额外额度到期','上游原文','Cookie 有效期','最近保活成功','刷新额度','账号卡片'])assert.notEqual(h.context.t(copy),copy,'Missing English '+copy);
+    h.setRespond(async()=>({accounts:[account],stats:{total:1,healthy:1}}));await h.context.loadPool();assert.equal(h.elements.get('poolBody').querySelectorAll('article').length,1);assert.match(h.elements.get('poolBody').textContent,/Last generation use/);assert.match(h.elements.get('poolBody').textContent,/Weekly quota remaining/);assert.equal(h.run('accounts[0].last_used'),state.last_run);
+    for(const copy of ['套餐','周剩余额度','额度重置','额外剩余额度','额外剩余','额外额度到期','上游原文','Cookie 有效期','最近保活成功','刷新额度','账号卡片'])assert.notEqual(h.context.t(copy),copy,'Missing English '+copy);
   });
   await test('line parser accepts manual email/phone and OTP URL + label without inventing password login',()=>{
     const h=harness();const result=h.run("parseLoginAccounts('one@example.com | https://mail.invalid/inbox?token=secret | one\\n+15551234567\\ntwo@example.com || manual')");
@@ -251,9 +255,72 @@ if (process.argv.includes('--serve')) {
   });
   await test('new Chinese UI copy has English translations and both language modes render statuses',()=>{
     const zh=harness(),en=harness('en');for(const text of ['批量登录','维护设置','诊断日志','启用自动保活','最近业务使用','最近保活','最近额度查询','保存维护设置','提交验证码','查看日志','需要人工处理验证，未确认登录成功。','自动刷新已停止，请手动刷新状态。'])assert.notEqual(en.context.t(text),text,text+' missing English');
-    const staticSection=html.slice(html.indexOf('<!-- ==================== 批量 OTP 登录'),html.indexOf('<!-- ==================== 任务记录'));
+    // Advanced login contains rich data-i18n blocks translated as whole HTML, not leaf strings.
+    const staticSection=html.slice(html.indexOf('<!-- ==================== 维护设置'),html.indexOf('<!-- ==================== 任务记录'));
     for(const part of staticSection.matchAll(/>([^<>]+)</g)){const text=decode(part[1]).trim();if(/[\u3400-\u9fff]/.test(text))assert.notEqual(en.context.t(text),text,'Missing English: '+text);}
     assert.equal(zh.context.loginStatus('waiting_otp'),'等待验证码');assert.equal(en.context.loginStatus('waiting_otp'),'Waiting for code');assert.equal(en.context.loginStatus('needs_manual'),'Manual action required');
+  });
+  await test('remaining balance width, text and continuous green-to-red color use the same validated percentage',()=>{
+    const h=harness();
+    for(const [used,remaining,hue] of [[0,100,120],[25,75,90],[50,50,60],[75,25,30],[95,5,6],[100,0,0],[12.5,87.5,105]]){
+      assert.equal(h.context.quotaRemaining(used),remaining);
+      const output=h.context.quotaProgress('周剩余额度',used);
+      assert.ok(output.includes('width:'+remaining+'%'));
+      assert.ok(output.includes('aria-valuenow="'+remaining+'"'));
+      assert.ok(output.includes('hsl('+hue+',70%,50%)'));
+      assert.ok(output.includes(remaining+'%'));
+    }
+    assert.match(h.context.quotaSummary({plan:'Free plan',weekly_used_pct:95,extra_used_pct:10}),/周剩余额度: 5%/);
+    assert.match(h.context.quotaSummary({weekly_used_pct:null}),/未知/);
+    const en=harness('en');assert.match(en.context.quotaSummary({weekly_used_pct:25}),/Weekly quota remaining: 75%/);
+  });
+  await test('login has one primary tab and advanced Cookie tools, without the old homepage upgrade box',async()=>{
+    assert.doesNotMatch(html,/data-t="cookie"|id="tab-cookie"|id="repoCommitsBox"|id="btnRepoPull"/);
+    assert.doesNotMatch(script,/function loadRepoStatus|function upgradeNow|promptUpgrade|api\.github\.com\/repos|\/admin\/update\/upgrade/);
+    const start=html.indexOf('id="tab-login"'),end=html.indexOf('id="tab-maintenance"');
+    assert.ok(start>0&&end>start);
+    for(const id of ['loginAccounts','loginAdvanced','newCookie','mCookie','extensionUpgradeNotice']) {
+      assert.ok(html.slice(start,end).includes('id="'+id+'"'),id+' must be inside Account login');
+      assert.equal([...html.matchAll(new RegExp('id="'+id+'"','g'))].length,1,'Duplicate '+id);
+    }
+    const h=await bootPage('zh');
+    for(const id of ['loginAccounts','newCookie','newLabel','mCookie','mLabel'])h.elements.get(id).value='sensitive-input';
+    h.context.goTab('cookie');assert.ok(h.elements.get('tab-login').classList.contains('active'));
+    h.context.goTab('pool');for(const id of ['loginAccounts','newCookie','newLabel','mCookie','mLabel'])assert.equal(h.elements.get(id).value,'');
+    assert.ok(!h.requests.some(x=>/update\/check|repo\/status/.test(x.path)),'Version checks must not run on boot or tabs');
+  });
+  await test('daily cleanup reads and saves strict independent settings without calling a deletion endpoint',async()=>{
+    const h=harness();h.setRespond(async(path,options)=>{
+      assert.equal(path,'/admin/cleanup/settings');
+      if(options.method==='PUT')return {settings:JSON.parse(options.body),state:cleanupState};
+      return {settings:cleanupDefaults,state:cleanupState};
+    });
+    await h.context.loadCleanupSettings();assert.equal(h.elements.get('cleanupEnabled').checked,false);
+    assert.equal(h.elements.get('cleanupSave').disabled,false);
+    for(const [id,value] of [['cleanupMediaMax','0'],['cleanupMediaTarget','10240'],['cleanupCheckTime','25:00'],['cleanupTimezone','Invalid/Moon']]){
+      const old=h.elements.get(id).value;h.elements.get(id).value=value;
+      await h.context.saveCleanupSettings();h.elements.get(id).value=old;
+    }
+    assert.equal(h.requests.length,1);
+    h.elements.get('cleanupCheckTime').value='04:30';h.elements.get('cleanupMediaMax').value='100';h.elements.get('cleanupMediaTarget').value='80';
+    await h.context.saveCleanupSettings();
+    const sent=JSON.parse(h.requests.at(-1).options.body);assert.deepEqual(sent,{...cleanupDefaults,check_time:'04:30',media_max_mb:100,media_target_mb:80});
+    assert.equal(h.requests.at(-1).options.method,'PUT');assert.ok(h.requests.every(x=>x.path==='/admin/cleanup/settings'));
+    assert.match(h.elements.get('cleanupMessage').textContent,/下一轮后台检查/);
+    assert.notEqual(harness('en').context.t('保存每日清理设置'),'保存每日清理设置');
+  });
+  await test('cleanup results preserve partial failures, protected files and the configured time zone',()=>{
+    const h=harness();h.context.populateCleanupSettings({settings:cleanupDefaults,state:{...cleanupState,last_checked_date:'2026-11-14',last_run:'2026-11-13T20:00:00+00:00',next_run:'2026-11-14T19:00:00+00:00',last_result:{status:'partial',media:{status:'partial',bytes_removed:1024,files_removed:1,target_not_reached:true},logs:{status:'error',errors:[{error_type:'PermissionError'}]}}}});
+    assert.equal(h.elements.get('cleanupLastDate').textContent,'2026-11-14');assert.match(h.elements.get('cleanupLastRun').textContent,/Asia\/Shanghai/);
+    assert.match(h.elements.get('cleanupResult').textContent,/未达到目标占用/);assert.match(h.elements.get('cleanupResult').textContent,/PermissionError/);
+  });
+  await test('release checks only execute on explicit action, are authenticated, and distinguish no published release',async()=>{
+    const h=harness();assert.equal(h.requests.length,0);
+    h.setRespond(async(path,options)=>{assert.equal(path,'/admin/update/check');assert.equal(options.headers.Authorization,'Bearer fixture-key');return {local_version:'1.6.12',remote_version:null,status:'no_releases',has_update:false,up_to_date:null};});
+    await h.context.checkNewVersion();assert.equal(h.requests.length,1);assert.match(h.elements.get('versionMessage').textContent,/尚未发布版本/);
+    h.setRespond(async()=>({local_version:'1.6.12',remote_version:'v1.7.0',has_update:true}));await h.context.checkNewVersion();assert.match(h.elements.get('versionMessage').textContent,/手动更新/);
+    h.setRespond(async()=>{throw Error('network token=hidden');});await h.context.checkNewVersion();assert.doesNotMatch(h.elements.get('versionMessage').textContent,/hidden/);
+    assert.ok(h.requests.every(x=>x.path==='/admin/update/check'&&!x.options.method));
   });
   console.log('ALL PASS ('+passed+' admin automation checks)');
 }

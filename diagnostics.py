@@ -210,6 +210,9 @@ class Journal:
         self._context = ContextVar("diagnostics_" + uuid.uuid4().hex, default={})
         self._last_write_error: str | None = None
         self._last_write_at: str | None = None
+        # Pin retention to the original directory, not a later symlink target.
+        from cleanup import _DirectoryAnchor
+        self._purge_anchor = _DirectoryAnchor(self.path.parent)
 
     @contextmanager
     def context(self, **fields):
@@ -319,6 +322,27 @@ class Journal:
             if source.exists() or source.is_symlink():
                 os.replace(source, target)
         os.replace(self.path, Path(str(self.path) + ".1"))
+
+    def purge(self, max_bytes: int, target_bytes: int, *, now=None,
+              min_age_seconds: float = 300) -> dict:
+        """FIFO cleanup of only this Journal and its configured rotation slots.
+
+        Limits are combined logical bytes, independent of the per-file rotation
+        bound. Nothing is deleted unless combined size exceeds max_bytes. Holds
+        the same lock as emit/read/rotation for the whole operation. Recent logs
+        are protected, so target_not_reached is an honest possible result. An old
+        active file keeps its inode and newest complete JSONL records by in-place
+        tail compaction/truncation; it is never unlinked. Unmanaged logs are not
+        counted or touched, including similarly named slots above backup_count.
+        """
+        from cleanup import _as_utc, _purge_files
+        timestamp = _as_utc(now).timestamp()
+        names = [self.path.name] + [self.path.name + "." + str(number)
+                                    for number in range(1, self.backup_count + 1)]
+        with self._lock:
+            return _purge_files(self._purge_anchor, max_bytes, target_bytes, now=timestamp,
+                                min_age_seconds=min_age_seconds, names=names,
+                                active_name=self.path.name)
 
     def error(self, event: str, exc: BaseException, **fields) -> dict:
         """Persist a failure without ever interpolating untrusted exception text."""

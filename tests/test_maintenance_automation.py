@@ -21,6 +21,7 @@ import app
 from config import Config
 from maintenance import MaintenanceSettings, MaintenanceSettingsStore, operation_due
 from diagnostics import Journal
+from cleanup import CleanupManager
 from store import Store
 
 
@@ -28,12 +29,14 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="muse-maint-")
         self.original = {key: getattr(app, key) for key in
-                         ("store", "maintenance_settings", "journal", "GEN_LOCK", "ACCOUNT_POOL", "KEEPALIVE_LOCK")}
+                         ("store", "maintenance_settings", "journal", "cleanup_manager", "GEN_LOCK", "ACCOUNT_POOL", "KEEPALIVE_LOCK")}
         cfg = Config(base_dir=self.temp.name, profile_root=self.temp.name)
         cfg.ensure_dirs()
         app.store = Store(cfg)
         app.maintenance_settings = MaintenanceSettingsStore(str(Path(self.temp.name) / "maintenance.json"))
         app.journal = Journal(Path(self.temp.name) / "diagnostics.jsonl")
+        app.cleanup_manager = CleanupManager(cfg.media_dir, Path(self.temp.name)/"cleanup.json",
+                                             Path(self.temp.name)/"cleanup-state.json", app.journal)
         app.GEN_LOCK = app.ConcurrencyLock(1)
         app.ACCOUNT_POOL = app.AccountPoolManager(app.store)
         app.KEEPALIVE_LOCK = asyncio.Lock()
@@ -221,6 +224,43 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(page["entries"][0]["event"], "fixture.failed")
         self.assertTrue(page["health"]["ok"])
+
+    async def test_cleanup_settings_are_authenticated_strict_and_non_destructive(self):
+        media = Path(app.store.cfg.media_dir) / "protected-fixture.png"
+        media.write_bytes(b"keep this fixture")
+        original = media.read_bytes()
+        status, _ = await self.request("GET", "/admin/cleanup/settings", authorized=False)
+        self.assertEqual(status, 401)
+        status, result = await self.request("GET", "/admin/cleanup/settings")
+        self.assertEqual(status, 200)
+        self.assertFalse(result["settings"]["enabled"])
+        self.assertIsNone(result["state"]["last_checked_date"])
+        changed = {**result["settings"], "check_time": "04:15", "media_max_mb": 4,
+                   "media_target_mb": 2, "logs_max_mb": 3, "logs_target_mb": 1}
+        status, saved = await self.request("PUT", "/admin/cleanup/settings", changed)
+        self.assertEqual(status, 200)
+        self.assertEqual(saved["settings"], changed)
+        self.assertIsNone(saved["state"]["last_checked_date"])
+        self.assertEqual(media.read_bytes(), original)
+        self.assertTrue(Path(app.cleanup_manager.settings_path).is_file())
+        for bad in ({**changed, "check_time": "25:00"}, {**changed, "timezone": "Invalid/Moon"},
+                    {**changed, "media_target_mb": 4}, {**changed, "enabled": "true"}):
+            status, _ = await self.request("PUT", "/admin/cleanup/settings", bad)
+            self.assertEqual(status, 422)
+        self.assertEqual(app.cleanup_manager.get_settings(), changed)
+
+    async def test_releases_are_read_only_and_online_mutation_endpoints_retired(self):
+        with patch.object(app.release_checker, "check", return_value={"local_version":"1.6.12", "status":"no_releases"}) as check:
+            status, _ = await self.request("GET", "/admin/update/check", authorized=False)
+            self.assertEqual(status, 401)
+            check.assert_not_called()
+            status, result = await self.request("GET", "/admin/update/check")
+            self.assertEqual(status, 200)
+            self.assertEqual(result["status"], "no_releases")
+            self.assertEqual(check.call_count, 1)
+        for path in ("/admin/update/upgrade", "/admin/repo/pull", "/admin/repo/push"):
+            status, _ = await self.request("POST", path)
+            self.assertEqual(status, 410)
 
     async def test_invalid_settings_file_preserves_service_and_reports_error(self):
         target = Path(self.temp.name) / "invalid-settings.json"
