@@ -69,4 +69,8 @@ def operation_due(account: dict, operation: str, interval_minutes: int,
                     (account.get("quota") or {}).get("checked_at")) or 0
     if now - last_attempt < min(interval_minutes * 60, 300):
         return False
+    if operation == "keepalive":
+        expires_at = account.get("expires_at")
+        if isinstance(expires_at, (int, float)) and expires_at <= now + 6 * 3600:
+            return True  # Real/estimated session expiry is near; retry is still backed off above.
     return not last_success or now - last_success >= interval_minutes * 60

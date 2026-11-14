@@ -21,7 +21,8 @@ function section(start,end){
 const translationSource = section('const I18N_EN = {','function translateTree(');
 const apiSource = section('async function api(path, opts){','function fmtBytes(');
 const automationSource = section('/* ================= 管理自动化：','/* ================= 接入信息 / API Key ================= */');
-const tasksSource = section('let tasksHaveWork = false;','async function delTask(');
+const tasksSource = section('let tasksHaveWork = false,','async function delTask(');
+const studioSource = section('/* ================= 在线测试：','/* ================= 总览刷新 ================= */');
 const cardsSource = section('/* ================= 账号额度卡片 ================= */','/* ================= 额度显示 ================= */') + section('function proxyStatus(account){','async function loadPool(){');
 const poolLoadSource = section('async function loadPool(){','async function addAccount(');
 const settings = {keepalive_enabled:true,keepalive_interval_minutes:30,quota_enabled:true,quota_interval_minutes:60,include_disabled:false};
@@ -67,6 +68,8 @@ if (process.argv.includes('--serve')) {
     get classList(){const el=this;return {contains:name=>el.className.split(/\s+/).includes(name),add(name){if(!this.contains(name))el.className+=' '+name;},remove(name){el.className=el.className.split(/\s+/).filter(v=>v!==name).join(' ');},toggle(name,on){on??=!this.contains(name);if(on)this.add(name);else this.remove(name);}};}
     setAttribute(key,value){this.attributes[key]=String(value);if(key==='class')this.className=value;if(key==='id')this.id=value;if(key.startsWith('data-'))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
     getAttribute(key){return this.attributes[key]??null;}
+    removeAttribute(key){delete this.attributes[key];}
+    closest(selector){return this.matches(selector)?this:this.parentElement?.closest(selector)||null;}
     append(...children){for(const child of children){if(child.parentElement)child.parentElement.children=child.parentElement.children.filter(v=>v!==child);child.parentElement=this;this.children.push(child);}}
     replaceChildren(...children){for(const child of this.children)child.parentElement=null;this.children=[];this._text='';this.append(...children);}
     get lastElementChild(){return this.children.at(-1);}
@@ -92,18 +95,21 @@ if (process.argv.includes('--serve')) {
   function harness(language='zh') {
     const elements=new Map([...html.matchAll(/<([\w-]+)\b[^>]*\bid="([^"]+)"[^>]*>/g)].map(match=>{const el=new Element(match[1]);el.id=match[2];return [el.id,el];}));
     elements.get('tab-pool').className='tab active';
-    const timers=new Map(),events=new Map(),requests=[],storageWrites=[],toasts=[];let nextTimer=1;
+    const timers=new Map(),events=new Map(),requests=[],storageWrites=[],toasts=[],revoked=[],fileReads=[];let nextTimer=1;
+    const TestURL=class extends URL {};TestURL.createObjectURL=file=>'blob:fixture/'+file.name;TestURL.revokeObjectURL=url=>revoked.push(url);
+    class FileReader {readAsDataURL(file){fileReads.push(file.name);this.result='data:'+file.type+';base64,'+Buffer.from(file.name).toString('base64');queueMicrotask(()=>this.onload?.());}abort(){this.onabort?.();}}
+    for(const kind of ['img','vid']){elements.get(kind+'Ratio').value=kind==='img'?'auto':'16:9';elements.get(kind+'Resolution').value='1K';elements.get(kind+'CustomRatio').value='7:5';elements.get(kind+'Prompt').value='Fixture prompt';elements.get(kind+'Width').value='1024';elements.get(kind+'Height').value='1024';}elements.get('vidDur').value='5';
     const document={hidden:false,getElementById:id=>elements.get(id),createElement:tag=>new Element(tag),querySelectorAll(selector){const match=selector.match(/^#([\w-]+) (.+)$/);return match?elements.get(match[1]).querySelectorAll(match[2]):[];},addEventListener(name,fn){events.set(name,fn);}};
-    const context={LANG:language,KEY:'fixture-key',document,window:{addEventListener(name,fn){events.set(name,fn);}},location:{origin:'http://fixture.invalid'},URL,URLSearchParams,AbortController,
+    const context={LANG:language,KEY:'fixture-key',document,window:{addEventListener(name,fn){events.set(name,fn);}},location:{origin:'http://fixture.invalid'},URL:TestURL,URLSearchParams,AbortController,FileReader,confirm:()=>true,
       $:id=>elements.get(id),setAuth:()=>{},toast:(...args)=>toasts.push(args),loadPool:async()=>{},goTab:name=>activate(name),delTask:async()=>{},fmtBytes:value=>String(value??''),localStorage:{setItem:(...args)=>storageWrites.push(args)},
       setTimeout(fn,delay){const id=nextTimer++;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
     let respond=async()=>({});
     context.fetch=async(path,options={})=>{requests.push({path,options});const data=await respond(path,options);return {status:data?.__status||200,ok:!data?.__status||data.__status<400,text:async()=>JSON.stringify(data)};};
     vm.createContext(context);
-    vm.runInContext(translationSource+apiSource+automationSource+tasksSource+cardsSource+'\nlet accounts=[];',context);
+    vm.runInContext(translationSource+apiSource+automationSource+tasksSource+cardsSource+studioSource+'\nlet accounts=[];',context);
     function activate(name){for(const [id,element] of elements)if(id.startsWith('tab-'))element.className='tab'+(id==='tab-'+name?' active':'');}
     const run=code=>vm.runInContext(code,context);
-    return {context,elements,timers,events,requests,storageWrites,toasts,activate,run,setRespond(fn){respond=fn;},async fireTimer(){const match=[...timers].find(([,timer])=>timer.delay<20000||timer.delay===30000);assert.ok(match,'Expected a poll timer');timers.delete(match[0]);await match[1].fn();await flush();}};
+    return {context,elements,timers,events,requests,storageWrites,toasts,revoked,fileReads,activate,run,setRespond(fn){respond=fn;},async fireTimer(){const match=[...timers].find(([,timer])=>timer.delay!==20000&&timer.delay<=30000);assert.ok(match,'Expected a poll timer');timers.delete(match[0]);await match[1].fn();await flush();}};
   }
   const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
   async function bootPage(language){
@@ -150,9 +156,9 @@ if (process.argv.includes('--serve')) {
       if(language==='en')assert.ok(h.observers.length);
     }
   });
-  await test('account cards contain real plan, reset text, quota progress and all eight actions without table layout',()=>{
+  await test('compact account cards contain plan, reset, remaining quota and only enable/delete actions',()=>{
     const h=harness(), account={id:'card-1',label:'Main',enabled:true,ok:true,essential_ok:true,cookie_count:4,expires_at:state.last_run,last_used:state.last_run-500,last_keepalive:state.last_run-100,quota:{plan:'Free plan',weekly_used_pct:12.5,weekly_reset:'10月30日',extra_used_pct:0,extra_left:'2B tokens left',extra_expires:'never',checked_at:state.last_run}};
-    const body=h.elements.get('poolBody');body.innerHTML=h.context.accountCard(account);assert.equal(body.querySelectorAll('article').length,1);assert.equal(body.querySelectorAll('tr').length,0);assert.match(body.textContent,/Free plan/);assert.match(body.textContent,/87.5%/);assert.match(body.textContent,/10月30日/);assert.match(body.textContent,/2B tokens left/);assert.match(body.textContent,/Asia\/Shanghai/);assert.equal(body.querySelectorAll('button[data-account-action]').length,8);assert.equal(body.querySelector('div[role="progressbar"]').getAttribute('aria-valuenow'),'87.5');assert.doesNotMatch(body.innerHTML,/onclick=|reset-quota|credit-toggle/);assert.match(html,/repeat\(auto-fill,minmax\(min\(100%,350px\),1fr\)\)/);
+    const body=h.elements.get('poolBody');body.innerHTML=h.context.accountCard(account);assert.equal(body.querySelectorAll('article').length,1);assert.equal(body.querySelectorAll('tr').length,0);assert.match(body.textContent,/Free plan/);assert.match(body.textContent,/87.5%/);assert.match(body.textContent,/10月30日/);assert.match(body.textContent,/2B tokens left/);assert.match(body.textContent,/Asia\/Shanghai/);assert.equal(body.querySelectorAll('button[data-account-action]').length,2);assert.equal(body.querySelector('div[role="progressbar"]').getAttribute('aria-valuenow'),'87.5');assert.doesNotMatch(body.innerHTML,/onclick=|reset-quota|credit-toggle/);assert.match(html,/repeat\(auto-fill,minmax\(min\(100%,350px\),1fr\)\)/);
   });
   await test('unknown quota is never zero, invalid percentages cannot enter CSS, and raw reset strings never acquire a guessed date',()=>{
     const h=harness();for(const value of [undefined,null,'50',NaN,Infinity,-1,101,'0%;background:url(evil)']){assert.equal(h.context.quotaPercent(value),null);const output=h.context.quotaProgress('周额度用量',value);assert.match(output,/未知/);assert.doesNotMatch(output,/aria-valuenow|50%|background:url/);}
@@ -161,7 +167,7 @@ if (process.argv.includes('--serve')) {
   });
   await test('account card fields and proxy metadata escape XSS, redact credentials, and retain old quota on error',()=>{
     const h=harness(),body=h.elements.get('poolBody');body.innerHTML=h.context.accountCard({id:'bad" onclick="evil',label:'<img src=x>',enabled:true,ok:false,quota:{plan:'<script>evil()</script>',weekly_used_pct:'100%;color:red',weekly_reset:'<img src=x>',extra_left:'<iframe>bad</iframe>'},quota_error:'Failed cookie=SECRET',note:'Authorization: Bearer SECRET',proxy:{server:'socks5://user:SECRET@proxy.example:1080?token=SECRET'},proxy_status:{proxy_reachable:true}});
-    assert.equal(body.querySelectorAll('img').length,0);assert.equal(body.querySelectorAll('script').length,0);assert.equal(body.querySelectorAll('iframe').length,0);assert.doesNotMatch(body.innerHTML,/SECRET|onclick="evil"|width:100%;color:red/);assert.match(body.textContent,/socks5:\/\/proxy.example:1080/);assert.match(body.textContent,/保留上次成功快照/);assert.match(body.textContent,/代理未测试/);
+    assert.equal(body.querySelectorAll('img').length,0);assert.equal(body.querySelectorAll('script').length,0);assert.equal(body.querySelectorAll('iframe').length,0);assert.doesNotMatch(body.innerHTML,/SECRET|onclick="evil"|width:100%;color:red/);assert.doesNotMatch(body.textContent,/proxy.example|代理未测试/);assert.match(body.textContent,/保留上次成功快照/);
   });
   await test('delegated card actions preserve exact account identity and labels without embedding JavaScript handlers',async()=>{
     const h=harness(),calls=[];h.run('accounts=[{id:"acc/1",label:"quoted label",enabled:false}]');
@@ -171,7 +177,7 @@ if (process.argv.includes('--serve')) {
   });
   await test('account API renders cards, business timestamp is not changed by a quota snapshot refresh, and cards translate',async()=>{
     const h=harness('en');h.run(poolLoadSource);const account={id:'account-1',label:'Account',enabled:true,ok:true,last_used:state.last_run,quota:{plan:'Free plan',weekly_used_pct:15,weekly_reset:'Sep 30',checked_at:state.last_run+1000}};
-    h.setRespond(async()=>({accounts:[account],stats:{total:1,healthy:1}}));await h.context.loadPool();assert.equal(h.elements.get('poolBody').querySelectorAll('article').length,1);assert.match(h.elements.get('poolBody').textContent,/Last generation use/);assert.match(h.elements.get('poolBody').textContent,/Weekly quota remaining/);assert.equal(h.run('accounts[0].last_used'),state.last_run);
+    h.setRespond(async()=>({accounts:[account],stats:{total:1,healthy:1}}));await h.context.loadPool();assert.equal(h.elements.get('poolBody').querySelectorAll('article').length,1);assert.match(h.elements.get('poolBody').textContent,/Last quota query/);assert.match(h.elements.get('poolBody').textContent,/Weekly quota remaining/);assert.equal(h.run('accounts[0].last_used'),state.last_run);
     for(const copy of ['套餐','周剩余额度','额度重置','额外剩余额度','额外剩余','额外额度到期','上游原文','Cookie 有效期','最近保活成功','刷新额度','账号卡片'])assert.notEqual(h.context.t(copy),copy,'Missing English '+copy);
   });
   await test('line parser accepts manual email/phone and OTP URL + label without inventing password login',()=>{
@@ -321,6 +327,97 @@ if (process.argv.includes('--serve')) {
     h.setRespond(async()=>({local_version:'1.6.12',remote_version:'v1.7.0',has_update:true}));await h.context.checkNewVersion();assert.match(h.elements.get('versionMessage').textContent,/手动更新/);
     h.setRespond(async()=>{throw Error('network token=hidden');});await h.context.checkNewVersion();assert.doesNotMatch(h.elements.get('versionMessage').textContent,/hidden/);
     assert.ok(h.requests.every(x=>x.path==='/admin/update/check'&&!x.options.method));
+  });
+  await test('studio geometry computes coherent ratios and dimensions for every preset and validates custom inputs',()=>{
+    const h=harness(),compute=h.context.computeGenerationGeometry;
+    for(const kind of ['image','video'])for(const ratio of ['auto','1:1','16:9','9:16','4:3','3:4','21:9','custom'])for(const res of ['1K','2K']){
+      const g=compute(kind,ratio,res,'7:5');const [a,b]=g.aspect_ratio.split(':').map(Number);
+      assert.equal(g.width*b,g.height*a);assert.equal(g.size,g.resolution);assert.equal(g.size,g.width+'x'+g.height);
+      assert.ok(g.width>=64&&g.height>=64&&Math.max(g.width,g.height)<=(res==='2K'?2048:1024));
+    }
+    assert.equal(compute('image','16:9','1K').size,'1024x576');
+    assert.equal(compute('video','9:16','2K').size,'1152x2048');
+    for(const size of ['1024x1024','1920x1080','1080x1920','1280x720','720x1280','2048x2048'])assert.equal(compute('image','auto',size).size,size);
+    assert.equal(compute('image','dimensions','custom','',8192,64).aspect_ratio,'128:1');
+    for(const pair of [[63,64],[64,8193],[100.5,200],['',400],[Infinity,200]])assert.throws(()=>compute('video','dimensions','custom','',...pair));
+    for(const value of ['0:4','1:0','-1:2','bogus','1:99999'])assert.throws(()=>compute('image','custom','1K',value));
+    h.elements.get('imgResolution').value='1920x1080';h.context.syncGenerationGeometry('image','resolution');assert.equal(h.elements.get('imgRatio').value,'dimensions');assert.equal(h.elements.get('imgWidth').value,1920);
+    h.elements.get('imgRatio').value='3:4';h.context.syncGenerationGeometry('image','ratio');assert.equal(h.elements.get('imgResolution').value,'1K');assert.match(h.elements.get('imgGeometry').textContent,/3:4.*768x1024/);
+  });
+  await test('references encode once in backend order and payload geometry is identical for image editing and video',async()=>{
+    const h=harness(),file=(name,type,size=10)=>({name,type,size}),add=async(kind,group,files)=>h.context.addGenerationFiles(kind,group,{files,value:'secret path'});
+    await add('image','images',[file('first.png','image/png'),file('<script>.png','image/png')]);await add('image','audios',[file('audio.wav','audio/wav')]);await add('image','files',[file('brief.pdf','application/pdf')]);
+    assert.deepEqual(h.fileReads,[]);assert.equal(h.elements.get('imgReferenceList').querySelectorAll('script').length,0);
+    assert.match(h.elements.get('imgReferenceList').textContent,/\[图1\].*first.png.*\[图2\]/);assert.match(h.elements.get('imgReferenceList').textContent,/\[音频1\]/);
+    const payload=await h.context.generationPayload('image');await h.context.generationPayload('image');
+    assert.deepEqual(h.fileReads,['first.png','<script>.png','audio.wav','brief.pdf']);assert.equal(payload.images.length,2);assert.equal(payload.audios.length,1);assert.equal(payload.files.length,1);assert.equal(payload.videos.length,0);
+    assert.equal(payload.model,'muse-image');assert.equal(payload.size,payload.resolution);assert.equal(payload.aspect_ratio,'1:1');assert.deepEqual(Object.keys(payload).slice(-4),['images','videos','audios','files']);
+    assert.equal(h.storageWrites.length,0);const firstId=h.run('generationState.image.references.images[0].id');h.context.removeGenerationReference('image',firstId);assert.equal(h.revoked.length,1);
+    h.context.clearGenerationReferences('image');assert.equal(h.run('referenceEntries("image").length'),0);assert.equal(h.revoked.length,3);assert.equal(h.elements.get('imgReferenceList').textContent,'');
+    await add('video','images',[file('frame.webp','image/webp')]);await add('video','audios',[file('voice.mp3','audio/mpeg')]);const video=await h.context.generationPayload('video');assert.equal(video.duration,5);assert.equal(video.aspect_ratio,'16:9');assert.equal(video.size,video.resolution);
+  });
+  await test('reference prevalidation blocks count, empty/oversize/type/total without reading a single byte',async()=>{
+    const h=harness(),file=(name,size,type='image/png')=>({name,size,type});
+    for(const files of [[file('huge.png',40*1024*1024+1)],[file('empty.png',0)],[file('bad.exe',1,'application/x-executable')],Array(11).fill(file('small.png',1)),[file('a.png',40*1024*1024),file('b.png',40*1024*1024),file('c.png',21*1024*1024)]]){
+      const input={files,value:'private path'};await h.context.addGenerationFiles('image','images',input);assert.equal(input.value,'');assert.equal(h.run('referenceEntries("image").length'),0);assert.match(h.elements.get('imgReferenceMessage').textContent,/失败/);
+    }
+    assert.equal(h.fileReads.length,0);assert.equal(h.requests.length,0);assert.equal(h.storageWrites.length,0);
+    await h.context.addGenerationFiles('image','videos',{files:[file('clip.mp4',1,'video/mp4')],value:''});assert.equal(h.run('referenceEntries("image").length'),0);
+    const adding=h.context.addGenerationFiles('video','videos',{files:[file('clip.mp4',1,'video/mp4')],value:''});const timer=[...h.timers].find(([,timer])=>timer.delay===10000);assert.ok(timer);h.timers.delete(timer[0]);timer[1].fn();await adding;assert.equal(h.run('referenceEntries("video").length'),0);assert.equal(h.revoked.at(-1),'blob:fixture/clip.mp4');
+  });
+  await test('generation POST is single-shot, authenticated, task IDs are encoded, and terminal success releases refs',async()=>{
+    const h=harness();h.activate('play');await h.context.addGenerationFiles('image','images',{files:[{name:'a.png',type:'image/png',size:5}],value:''});
+    let release;h.setRespond((path,options)=>{assert.equal(path,'/v1/images/tasks');assert.equal(options.headers.Authorization,'Bearer fixture-key');const payload=JSON.parse(options.body);assert.equal(payload.images.length,1);assert.equal(payload.size,payload.resolution);return new Promise(resolve=>release=resolve);});
+    const first=h.context.runImage();await flush();await h.context.runImage();assert.equal(h.requests.length,1);release({id:'task/a ?#',status:'queued'});await first;assert.ok(h.elements.get('imgBtn').disabled);await h.context.runImage();assert.equal(h.requests.length,1);
+    h.setRespond(async path=>{assert.equal(path,'/v1/images/tasks/task%2Fa%20%3F%23');return {id:'task/a ?#',status:'completed',data:[{url:'/v1/media/result.webp',bytes:100}]};});await h.fireTimer();assert.equal(h.elements.get('imgBtn').disabled,false);assert.match(h.elements.get('imgRes').textContent,/生成成功/);assert.equal(h.elements.get('imgRes').querySelectorAll('img').length,1);assert.equal(h.timers.size,0);assert.equal(h.revoked.length,1);assert.equal(h.run('referenceEntries("image").length'),0);
+  });
+  await test('video failures and uncertain creation are explicit and cannot trigger automatic duplicate posts',async()=>{
+    const h=harness();h.activate('play');h.setRespond(async(path,options)=>options.method==='POST'?{id:'video/1',status:'queued'}:{id:'video/1',status:'failed',error:'upstream failed cookie=NEVER_SHOW'});
+    await h.context.runVideo();await h.fireTimer();assert.equal(h.elements.get('vidBtn').disabled,false);assert.match(h.elements.get('vidRes').textContent,/生成失败/);assert.doesNotMatch(h.elements.get('vidRes').textContent,/NEVER_SHOW/);assert.equal(h.timers.size,0);
+    const uncertain=harness();uncertain.activate('play');uncertain.setRespond(async()=>{throw Error('offline token=NEVER_SHOW');});await uncertain.context.runVideo();await uncertain.context.runVideo();assert.equal(uncertain.requests.length,1);assert.ok(uncertain.elements.get('vidBtn').disabled);assert.match(uncertain.elements.get('vidRes').textContent,/提交状态未知/);assert.doesNotMatch(uncertain.elements.get('vidRes').textContent,/NEVER_SHOW/);
+    await uncertain.context.resumeGeneration('video');assert.equal(uncertain.elements.get('vidBtn').disabled,false);
+    const invalid=harness();invalid.elements.get('vidDur').value='0';await invalid.context.runVideo();assert.equal(invalid.requests.length,0);assert.equal(invalid.elements.get('vidBtn').disabled,false);
+  });
+  await test('generation polling stops when hidden, after five failures and deadline without unlocking resubmission',async()=>{
+    const h=harness();h.activate('play');h.setRespond(async()=>({id:'busy',status:'queued'}));await h.context.runImage();assert.equal(h.timers.size,1);h.context.document.hidden=true;h.events.get('visibilitychange')();assert.equal(h.timers.size,0);h.context.document.hidden=false;h.events.get('visibilitychange')();assert.equal(h.timers.size,1);
+    h.setRespond(async()=>{throw Error('offline');});for(let i=0;i<5;i++)await h.fireTimer();assert.equal(h.timers.size,0);assert.ok(h.elements.get('imgBtn').disabled);assert.match(h.elements.get('imgRes').textContent,/自动刷新已停止/);const postCount=h.requests.filter(r=>r.options.method==='POST').length;await h.context.runImage();assert.equal(h.requests.filter(r=>r.options.method==='POST').length,postCount);
+    h.run('generationState.image.started=Date.now()-16*60*1000;generationState.image.paused=false');await h.run('generationPollers.image.run()');assert.equal(h.timers.size,0);
+  });
+  await test('quota reset countdown requires exact seconds, calendar dates never fabricate an hour, raw text stays raw',()=>{
+    const h=harness(),now=Date.parse('2026-11-14T02:00:00Z');
+    const exact=h.context.quotaResetText({weekly_reset_at:now/1000+2*86400+3*3600},now);assert.match(exact,/还剩 2 天 3 小时/);
+    assert.match(h.context.quotaResetText({weekly_reset_at:now/1000-1},now),/已到重置时间/);
+    const date=h.context.quotaResetText({weekly_reset_date:'2026-11-16',weekly_reset_timezone:'Asia/Shanghai',weekly_reset:'11月16日'},now);assert.match(date,/还有 2 天（日期）/);assert.doesNotMatch(date,/小时|00:00/);
+    assert.equal(h.context.quotaResetText({weekly_reset:'Sep 30'},now),'Sep 30');assert.equal(h.context.quotaResetText({weekly_reset:'2026-11-16'},now),'2026-11-16');assert.equal(h.context.quotaResetText({weekly_reset_at:'1794736800',weekly_reset:'raw'},now),'raw');
+  });
+  await test('refresh all forces one queue request, reloads accounts on completion and reports failed and busy operations',async()=>{
+    const h=harness();h.activate('pool');let reloads=0;h.context.loadPool=async()=>reloads++;
+    const summary={refreshed:[{id:'a',ok:true,operation:'keepalive'},{id:'a',ok:false,error:'bad cookie=hidden',operation:'quota'}],skipped:[{id:'b',busy:true,error:'busy'}]};
+    h.setRespond(async(path,options)=>{if(path==='/admin/maintenance/run'){assert.deepEqual(JSON.parse(options.body),{force_refresh:true});return {__status:202,status:'queued'};}return {...state,last_result:summary,running:false};});
+    await h.context.runMaintenance();await h.context.runMaintenance();assert.equal(h.requests.length,1);assert.ok(h.elements.get('btnKeepaliveAll').disabled);await h.fireTimer();assert.equal(reloads,1);assert.equal(h.elements.get('btnKeepaliveAll').disabled,false);assert.match(h.elements.get('poolRefreshMessage').textContent,/成功 1.*失败 1.*忙碌跳过 1/);assert.doesNotMatch(h.elements.get('poolRefreshMessage').textContent,/hidden/);
+    h.setRespond(async()=>{throw Error('server rejected token=hidden');});await h.context.runMaintenance();assert.match(h.elements.get('poolRefreshMessage').textContent,/全部刷新失败/);assert.equal(h.elements.get('btnKeepaliveAll').disabled,false);
+  });
+  await test('logs and task rows show explicit assigned label/id/attempt, never borrow an unrelated account',async()=>{
+    const h=harness();h.run('accounts=[{id:"wrong",label:"WrongAccount"}]');h.setRespond(async()=>({entries:[{account_id:'acc-1',account_label:'Label<img src=x>',attempt:2,task_id:'t1',message:'fixture'},{task_id:'t2'}],total:2,offset:0}));
+    await h.context.loadLogs();const body=h.elements.get('logsBody');assert.match(body.textContent,/使用账号.*Label<img src=x>.*acc-1/);assert.match(body.textContent,/尝试 2/);assert.match(body.textContent,/未分配账号/);assert.doesNotMatch(body.textContent,/WrongAccount/);assert.equal(body.querySelectorAll('img').length,0);
+  });
+  await test('task details fetch encoded IDs and only projected safe media with cleanup, prompt escape and account metadata',async()=>{
+    const h=harness();const task={id:'task/a ?',status:'completed',kind:'video',prompt:'<img src=x onerror=bad()>',api_prompt:'<script>upstream</script>',account_id:'a1',account_label:'Main',attempts:[{attempt:1,account_id:'a1',account_label:'Main'}],generation:{size:'1920x1080',aspect_ratio:'16:9',resolution:'1920x1080',duration:5,reference_counts:{images:2}},media:{kind:'video',url:'/v1/media/fixture.mp4',exists:true,bytes:20,width:1920,height:1080}};
+    h.setRespond(async path=>{assert.equal(path,'/admin/tasks/task%2Fa%20%3F');return {task};});await h.context.openTaskDetail(task.id);const body=h.elements.get('taskDetailBody');assert.equal(body.querySelectorAll('img').length,0);assert.equal(body.querySelectorAll('script').length,0);const player=body.querySelector('video');assert.ok(player);assert.equal(player.getAttribute('preload'),'metadata');assert.equal(player.getAttribute('autoplay'),null);assert.match(body.textContent,/Main.*a1/);assert.match(body.textContent,/1920x1080/);
+    h.setRespond(async()=>({task:{...task,media:{...task.media,exists:false,availability:'deleted'}}}));await h.context.openTaskDetail(task.id);assert.equal(body.querySelectorAll('video').length,0);assert.match(body.textContent,/媒体已清理/);
+    h.setRespond(async()=>({task:{...task,result:{url:'javascript:evil()'},media:{kind:'image',url:'javascript:evil()',exists:true}}}));await h.context.openTaskDetail(task.id);assert.equal(body.querySelectorAll('img').length,0);assert.doesNotMatch(body.innerHTML,/javascript:/);
+    const raw=h.context.taskMediaHTML({kind:'audio',url:'/v1/media/song.mp3',exists:true},true);assert.match(raw,/<audio[^>]*controls[^>]*preload="metadata"/);assert.doesNotMatch(raw,/autoplay/);
+    h.context.closeTaskDetail();assert.equal(h.elements.get('taskDetail').hidden,true);assert.equal(body.textContent,'');
+  });
+  await test('task list never scans the removed media library and details errors are bounded and retained safely',async()=>{
+    assert.doesNotMatch(html,/data-t="media"|id="tab-media"|id="mediaGrid"/);assert.doesNotMatch(script,/loadMedia\(|\/admin\/media(?:['"]|\/)/);
+    const h=harness();h.activate('tasks');h.setRespond(async()=>({tasks:[{id:'deleted',status:'completed',prompt:'kept',media:{exists:false,availability:'deleted'}},{id:'raw-only',status:'completed',result:{url:'https://untrusted.invalid/raw'}}]}));await h.context.loadTasks();assert.match(h.elements.get('taskBody').textContent,/媒体已清理/);assert.doesNotMatch(h.elements.get('taskBody').innerHTML,/untrusted.invalid/);
+    h.setRespond(async()=>{throw Error('not found cookie=hidden');});await h.context.openTaskDetail('missing');assert.match(h.elements.get('taskDetailBody').textContent,/任务详情加载失败/);assert.doesNotMatch(h.elements.get('taskDetailBody').textContent,/hidden/);
+    assert.ok(h.requests.every(r=>!r.path.startsWith('/admin/media')));
+  });
+  await test('pagehide releases local object URLs and new studio/details strings translate in both languages',async()=>{
+    for(const language of ['zh','en']){const h=harness(language);await h.context.addGenerationFiles('image','images',{files:[{name:'local.png',type:'image/png',size:2}],value:''});h.events.get('pagehide')();assert.equal(h.revoked.length,1);assert.equal(h.run('referenceEntries("image").length'),0);assert.equal(h.storageWrites.length,0);}
+    const h=harness('en');for(const text of ['使用账号','全部刷新','自定义比例','自定义尺寸','分辨率目标','参考素材（可选）','清空参考素材','任务详情','媒体已清理；任务记录仍保留。','详情 / 预览','还剩','天（日期）','提交状态未知，请在任务记录确认结果，勿重复提交。'])assert.notEqual(h.context.t(text),text,text);
   });
   console.log('ALL PASS ('+passed+' admin automation checks)');
 }

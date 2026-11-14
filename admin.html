@@ -176,6 +176,10 @@
   .tile .meta .nm{font-family:ui-monospace,monospace;color:var(--text);font-size:11px;word-break:break-all}
   .tile .meta .ac{display:flex;gap:6px;margin-top:7px;align-items:center}
 
+  .reference-box{min-width:0;border:1px solid var(--line2);border-radius:10px;margin:14px 0;padding:12px}.reference-box legend{padding:0 6px;color:var(--muted)}
+  .reference-picker{display:flex;flex-direction:column;gap:6px;max-width:100%;margin:0}.reference-picker input{max-width:240px;font-size:12px}
+  .reference-list{padding-left:26px;margin:0}.reference-list li{margin:8px 0;overflow-wrap:anywhere}.reference-item{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.reference-item img{width:70px;height:55px;object-fit:contain;background:#060911}.reference-item audio{max-width:min(240px,100%)}.reference-item video{width:130px;max-height:90px}.reference-item .mono{max-width:100%;overflow-wrap:anywhere}
+  [hidden]{display:none!important}.task-detail{margin-top:16px;border-top:1px solid var(--line2);padding-top:14px}.task-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}.task-media img,.task-media video{display:block;max-width:100%;max-height:480px;margin:10px 0;background:#060911}.task-media audio{max-width:100%}.task-media-note{color:var(--warn);overflow-wrap:anywhere}
   /* ---------- 结果预览 ---------- */
   .result{margin-top:14px;padding:14px;background:var(--bg2);border:1px dashed var(--line);border-radius:var(--radius);display:none}
   .result.show{display:block}
@@ -279,7 +283,6 @@
     <button data-t="maintenance">维护设置</button>
     <button data-t="tasks">任务记录</button>
     <button data-t="logs">诊断日志</button>
-    <button data-t="media">媒体库</button>
     <button data-t="play">接口测试</button>
     <button data-t="docs">接入文档</button>
   </nav>
@@ -338,12 +341,13 @@
           <span class="badge mute" id="keepaliveBadge" style="font-size:11px">维护状态待加载</span>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="secondary" id="btnKeepaliveAll" onclick="runMaintenance()" style="font-size:12px;padding:6px 14px">立即维护账号池</button>
+          <button class="secondary" id="btnKeepaliveAll" onclick="runMaintenance()" style="font-size:12px;padding:6px 14px">全部刷新</button>
         </div>
       </div>
       <div class="hint" data-i18n="keepalive-hint">保活与额度查询按「维护设置」运行，保存后立即生效；「最近业务使用」只记录真实生成请求，不因保活或检测而更新。</div>
       <div class="hint"><span>最近保活</span>：<span id="poolLastKeepalive" class="mono">—</span> · <span>最近额度查询</span>：<span id="poolLastQuota" class="mono">—</span></div>
-      <div class="hint">额度为最近成功查询的快照；重置与到期文案按上游原文展示，不推算下次重置日期。</div>
+      <div class="hint">全部刷新会检查启用账号的会话与额度；忙碌账号会跳过。重置时间仅在有确切时间戳时倒计时，只有日期则按日期展示。</div>
+      <div id="poolRefreshMessage" class="automation-message" role="status" aria-live="polite"></div>
       <div id="poolBody" class="account-grid" aria-label="账号卡片"><div class="empty">加载中…</div></div>
     </div>
   </section>
@@ -650,56 +654,67 @@
         </tr></thead>
         <tbody id="taskBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
       </table></div>
+      <section id="taskDetail" class="task-detail" aria-live="polite" hidden><div class="automation-actions"><h3>任务详情</h3><button type="button" class="ghost mini" onclick="closeTaskDetail()">关闭详情</button></div><div id="taskDetailBody"></div></section>
     </div>
   </section>
 
-  <!-- ==================== 媒体库 ==================== -->
-  <section class="tab" id="tab-media">
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div>
-          <h3 style="margin:0 0 4px">媒体库 <span class="tag" id="mediaCount">0</span></h3>
-          <div class="hint" style="margin:0">所有已生成并落盘的图片 / 视频，可直接下载或把链接给下游项目使用。</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <button type="button" class="ghost mini" onclick="goTab('maintenance')">每日清理设置</button>
-          <button class="ghost mini" onclick="loadMedia()">刷新</button>
-          <button class="ghost mini" id="btnSelectAllMedia" onclick="toggleSelectAllMedia()">全选</button>
-          <button class="danger mini" id="btnDelSelectedMedia" onclick="delSelectedMedia()" style="display:none">删除选中 (<span id="selMediaCount">0</span>)</button>
-        </div>
-      </div>
-      <div class="grid" id="mediaGrid"><div class="empty">加载中…</div></div>
-    </div>
-  </section>
 
-  <!-- ==================== 接口测试 ==================== -->
   <section class="tab" id="tab-play">
-    <div class="card">
-      <h3>在线生图测试 <span class="tag">POST /v1/images/generations</span></h3>
-      <div class="hint">真实调用 muse.ai 生成，图片约 10–30 秒返回。</div>
-      <div class="row">
-        <div style="flex:3"><label>提示词</label>
-          <input type="text" id="imgPrompt" value="一只戴宇航头盔的柴犬，赛博朋克风格，霓虹灯背景"></div>
-        <div style="max-width:140px"><label>比例</label>
-          <select id="imgSize"><option>1:1</option><option>16:9</option><option>9:16</option><option>4:3</option><option>3:4</option></select></div>
-      </div>
-      <div style="margin-top:12px"><button class="primary-lg" id="imgBtn" onclick="runImage()">开始生成图片</button></div>
-      <div class="result" id="imgRes"></div>
-    </div>
+    <div class="card generation-studio" id="imgStudio">
+      <h3>在线生图测试 <span class="tag">POST /v1/images/tasks</span></h3>
+      <p class="hint">比例与尺寸是提示词目标，上游不保证实际像素。auto 使用默认画布；1K / 2K 表示长边目标上限，提交前会计算一致的比例与尺寸。</p>
+      <label for="imgPrompt">提示词</label><textarea id="imgPrompt" rows="3">一只戴宇航头盔的柴犬，赛博朋克风格，霓虹灯背景</textarea>
+      <div class="automation-form" style="margin-top:12px">
+        <div><label for="imgRatio">比例</label><select id="imgRatio" onchange="syncGenerationGeometry('image','ratio')"><option value="auto" selected>auto</option><option value="1:1">1:1</option><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option><option value="21:9">21:9</option><option value="custom">自定义比例</option><option value="dimensions">自定义尺寸</option></select></div>
+        <div><label for="imgResolution">分辨率目标</label><select id="imgResolution" onchange="syncGenerationGeometry('image','resolution')"><option value="1K">1K</option><option value="2K">2K</option><option value="1024x1024">1024x1024</option><option value="1920x1080">1920x1080</option><option value="1080x1920">1080x1920</option><option value="1280x720">1280x720</option><option value="720x1280">720x1280</option><option value="2048x2048">2048x2048</option><option value="custom">自定义尺寸</option></select></div>
+        <div id="imgCustomRatioWrap" hidden><label for="imgCustomRatio">自定义宽高比（如 7:5）</label><input type="text" id="imgCustomRatio" value="7:5" maxlength="30" oninput="syncGenerationGeometry('image')"></div>
+        <div><label for="imgWidth">宽度（64–8192）</label><input type="number" id="imgWidth" min="64" max="8192" step="1" value="1024" disabled oninput="syncGenerationGeometry('image')"></div>
+        <div><label for="imgHeight">高度（64–8192）</label><input type="number" id="imgHeight" min="64" max="8192" step="1" value="1024" disabled oninput="syncGenerationGeometry('image')"></div>
 
-    <div class="card">
-      <h3>在线生视频测试 <span class="tag">POST /v1/videos</span></h3>
-      <div class="hint">异步任务，一般 60–120 秒完成，页面会自动轮询进度。</div>
-      <div class="row">
-        <div style="flex:3"><label>提示词</label>
-          <input type="text" id="vidPrompt" value="一只橙色小猫在草地上慢慢走动，阳光明媚"></div>
-        <div style="max-width:110px"><label>时长(秒)</label>
-          <input type="number" id="vidDur" value="5" min="1" max="30"></div>
-        <div style="max-width:140px"><label>比例</label>
-          <select id="vidSize"><option>16:9</option><option>9:16</option><option>1:1</option></select></div>
       </div>
-      <div style="margin-top:12px"><button class="primary-lg" id="vidBtn" onclick="runVideo()">开始生成视频</button></div>
-      <div class="result" id="vidRes"></div>
+      <div id="imgGeometry" class="automation-message" role="status" aria-live="polite"></div>
+      <fieldset class="reference-box" id="imgReferences"><legend>参考素材（可选）</legend>
+        <p class="hint">按图片 → 视频 → 音频 → 文档的顺序提交；同类型按列表顺序。提示词可用 [图1]、[图2]、[音频1] 引用。最多 10 个，单个 40 MiB，总计 100 MiB；参考视频最长 120 秒。仅暂存内存，不写入浏览器存储。</p>
+        <div class="automation-actions">
+          <label class="reference-picker">参考图片<input type="file" id="imgImageFiles" multiple accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/avif" onchange="addGenerationFiles('image','images',this)"></label>
+
+          <label class="reference-picker">参考音频<input type="file" id="imgAudioFiles" multiple accept="audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac,audio/aac,audio/opus,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus" onchange="addGenerationFiles('image','audios',this)"></label>
+          <label class="reference-picker">参考文档<input type="file" id="imgDocumentFiles" multiple accept=".pdf,.doc,.docx" onchange="addGenerationFiles('image','files',this)"></label>
+          <button type="button" class="ghost mini" onclick="clearGenerationReferences('image')">清空参考素材</button>
+        </div>
+        <div id="imgReferenceMessage" class="automation-message" role="status" aria-live="polite"></div>
+        <ol id="imgReferenceList" class="reference-list"></ol>
+      </fieldset>
+      <div class="automation-actions"><button type="button" class="primary-lg" id="imgBtn" onclick="runImage()">开始生成图片</button><button type="button" class="ghost" id="imgResume" onclick="resumeGeneration('image')" hidden>刷新已有任务</button></div>
+      <div class="result" id="imgRes" role="status" aria-live="polite"></div>
+    </div>
+    <div class="card generation-studio" id="vidStudio">
+      <h3>在线生视频测试 <span class="tag">POST /v1/videos</span></h3>
+      <p class="hint">比例与尺寸是提示词目标，上游不保证实际像素。auto 使用默认画布；1K / 2K 表示长边目标上限，提交前会计算一致的比例与尺寸。</p>
+      <label for="vidPrompt">提示词</label><textarea id="vidPrompt" rows="3">一只橙色小猫在草地上慢慢走动，阳光明媚</textarea>
+      <div class="automation-form" style="margin-top:12px">
+        <div><label for="vidRatio">比例</label><select id="vidRatio" onchange="syncGenerationGeometry('video','ratio')"><option value="auto">auto</option><option value="1:1">1:1</option><option value="16:9" selected>16:9</option><option value="9:16">9:16</option><option value="4:3">4:3</option><option value="3:4">3:4</option><option value="21:9">21:9</option><option value="custom">自定义比例</option><option value="dimensions">自定义尺寸</option></select></div>
+        <div><label for="vidResolution">分辨率目标</label><select id="vidResolution" onchange="syncGenerationGeometry('video','resolution')"><option value="1K">1K</option><option value="2K">2K</option><option value="1024x1024">1024x1024</option><option value="1920x1080">1920x1080</option><option value="1080x1920">1080x1920</option><option value="1280x720">1280x720</option><option value="720x1280">720x1280</option><option value="2048x2048">2048x2048</option><option value="custom">自定义尺寸</option></select></div>
+        <div id="vidCustomRatioWrap" hidden><label for="vidCustomRatio">自定义宽高比（如 7:5）</label><input type="text" id="vidCustomRatio" value="7:5" maxlength="30" oninput="syncGenerationGeometry('video')"></div>
+        <div><label for="vidWidth">宽度（64–8192）</label><input type="number" id="vidWidth" min="64" max="8192" step="1" value="1024" disabled oninput="syncGenerationGeometry('video')"></div>
+        <div><label for="vidHeight">高度（64–8192）</label><input type="number" id="vidHeight" min="64" max="8192" step="1" value="576" disabled oninput="syncGenerationGeometry('video')"></div>
+        <div><label for="vidDur">时长(秒)</label><input type="number" id="vidDur" value="5" min="1" max="30" step="1"></div>
+      </div>
+      <div id="vidGeometry" class="automation-message" role="status" aria-live="polite"></div>
+      <fieldset class="reference-box" id="vidReferences"><legend>参考素材（可选）</legend>
+        <p class="hint">按图片 → 视频 → 音频 → 文档的顺序提交；同类型按列表顺序。提示词可用 [图1]、[图2]、[音频1] 引用。最多 10 个，单个 40 MiB，总计 100 MiB；参考视频最长 120 秒。仅暂存内存，不写入浏览器存储。</p>
+        <div class="automation-actions">
+          <label class="reference-picker">参考图片<input type="file" id="vidImageFiles" multiple accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/avif" onchange="addGenerationFiles('video','images',this)"></label>
+          <label class="reference-picker">参考视频<input type="file" id="vidVideoFiles" multiple accept="video/mp4,video/quicktime,video/webm,video/3gpp,.mp4,.mov,.webm,.3gp" onchange="addGenerationFiles('video','videos',this)"></label>
+          <label class="reference-picker">参考音频<input type="file" id="vidAudioFiles" multiple accept="audio/mpeg,audio/wav,audio/mp4,audio/ogg,audio/flac,audio/aac,audio/opus,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus" onchange="addGenerationFiles('video','audios',this)"></label>
+          <label class="reference-picker">参考文档<input type="file" id="vidDocumentFiles" multiple accept=".pdf,.doc,.docx" onchange="addGenerationFiles('video','files',this)"></label>
+          <button type="button" class="ghost mini" onclick="clearGenerationReferences('video')">清空参考素材</button>
+        </div>
+        <div id="vidReferenceMessage" class="automation-message" role="status" aria-live="polite"></div>
+        <ol id="vidReferenceList" class="reference-list"></ol>
+      </fieldset>
+      <div class="automation-actions"><button type="button" class="primary-lg" id="vidBtn" onclick="runVideo()">开始生成视频</button><button type="button" class="ghost" id="vidResume" onclick="resumeGeneration('video')" hidden>刷新已有任务</button></div>
+      <div class="result" id="vidRes" role="status" aria-live="polite"></div>
     </div>
   </section>
 
@@ -1515,6 +1530,101 @@ const I18N_EN = {
   "✗ 保活失败: 未知错误": "✗ Keep-alive failed: unknown error",
 };
 /* 含富文本的块：data-i18n="key" → 英文 innerHTML（须保留原有子元素的 id/class/属性） */
+Object.assign(I18N_EN,{
+  "全部刷新": "Refresh all",
+  "全部刷新完成": "Refresh all completed",
+  "成功": "Succeeded",
+  "失败": "Failed",
+  "忙碌跳过": "Skipped busy",
+  "其他跳过": "Other skips",
+  "账号忙碌": "Account busy",
+  "刷新结束，未返回详细结果。": "Refresh finished without detailed results.",
+  "刷新正在执行，请等待当前维护完成。": "Refresh is already running. Wait for maintenance to finish.",
+  "正在刷新启用账号，会话与额度将在后台更新…": "Refreshing enabled accounts; sessions and quota update in the background…",
+  "全部刷新已排队，即使自动维护关闭也会刷新启用账号。": "Refresh queued; enabled accounts will be checked even when automatic maintenance is off.",
+  "全部刷新失败": "Refresh all failed",
+  "使用账号": "Account used",
+  "队列 / 系统": "Queue / system",
+  "队列 / 系统（未分配账号）": "Queue / system (no account assigned)",
+  "账号未命名": "Unnamed account",
+  "尝试": "Attempt",
+  "还剩": "Remaining",
+  "还有": "In",
+  "天": "days",
+  "小时": "hours",
+  "天（日期）": "days (date precision)",
+  "已到重置时间，等待刷新": "Reset time reached; awaiting refresh",
+  "已到重置日期，等待刷新": "Reset date reached; awaiting refresh",
+  "额外额度详情": "Extra quota details",
+  "有效期待确认": "Expiry unconfirmed",
+  "已记录到期，认证待确认": "Recorded expiry passed; authentication unconfirmed",
+  "有效期": "Expires",
+  "比例与尺寸是提示词目标，上游不保证实际像素。auto 使用默认画布；1K / 2K 表示长边目标上限，提交前会计算一致的比例与尺寸。": "Ratio and dimensions are prompt targets, not guaranteed pixels. Auto uses a default square canvas; 1K / 2K cap the longer edge. Consistent geometry is computed before submission.",
+  "比例与尺寸是提示词目标，上游不保证实际像素。": "Ratio and dimensions are prompt targets, not guaranteed actual pixels.",
+  "全部刷新会检查启用账号的会话与额度；忙碌账号会跳过。重置时间仅在有确切时间戳时倒计时，只有日期则按日期展示。": "Refresh all checks sessions and quota for enabled accounts; busy accounts are skipped. Countdown requires an exact timestamp. Date-only resets show calendar days.",
+  "自定义比例": "Custom ratio",
+  "自定义尺寸": "Custom dimensions",
+  "分辨率目标": "Resolution target",
+  "自定义宽高比（如 7:5）": "Custom width:height ratio (e.g. 7:5)",
+  "宽度（64–8192）": "Width (64–8192)",
+  "高度（64–8192）": "Height (64–8192)",
+  "实际提交目标": "Submitted target",
+  "非实际像素保证": "Not guaranteed pixels",
+  "参数有误": "Invalid parameters",
+  "请选择有效的分辨率目标。": "Choose a valid resolution target.",
+  "请输入有效的宽高比，如 7:5。": "Enter a valid width:height ratio, e.g. 7:5.",
+  "宽高必须是 64–8192 的整数，且比例需能组成有效尺寸。": "Width and height must be integers from 64 to 8192, with a ratio that allows valid dimensions.",
+  "参考素材（可选）": "References (optional)",
+  "按图片 → 视频 → 音频 → 文档的顺序提交；同类型按列表顺序。提示词可用 [图1]、[图2]、[音频1] 引用。最多 10 个，单个 40 MiB，总计 100 MiB；参考视频最长 120 秒。仅暂存内存，不写入浏览器存储。": "Submission order: images → videos → audio → documents, preserving each list order. Use [图1], [图2], [音频1] in prompts. Up to 10 references, 40 MiB each, 100 MiB total; reference videos up to 120 seconds. Memory only, never browser storage.",
+  "参考图片": "Reference images",
+  "参考音频": "Reference audio",
+  "参考视频": "Reference videos",
+  "参考文档": "Reference documents",
+  "清空参考素材": "Clear references",
+  "已清空参考素材。": "References cleared.",
+  "移除": "Remove",
+  "图": "Image",
+  "音频": "Audio",
+  "文档": "Document",
+  "该生成类型不支持此参考素材。": "This generation type does not support this reference.",
+  "参考素材最多 10 个。": "Up to 10 reference files.",
+  "单个参考素材必须非空且不超过 40 MiB。": "Each reference must be nonempty and at most 40 MiB.",
+  "参考文件类型不受支持。": "Unsupported reference file type.",
+  "参考素材总大小不能超过 100 MiB。": "References must not exceed 100 MiB total.",
+  "参考视频必须有有效时长且不超过 120 秒。": "Reference videos need a valid duration of at most 120 seconds.",
+  "无法读取参考视频时长，请换用有效的 MP4 / MOV / WebM / 3GP。": "Cannot read video duration. Use a valid MP4 / MOV / WebM / 3GP.",
+  "读取参考视频超时。": "Timed out reading reference video.",
+  "添加参考素材失败": "Failed to add references",
+  "读取参考文件失败。": "Failed to read reference file.",
+  "时长必须为 1–30 秒的整数。": "Duration must be an integer from 1 to 30 seconds.",
+  "刷新已有任务": "Refresh existing task",
+  "确认提交状态后解除锁定": "Unlock after checking submission status",
+  "请在任务记录确认结果，勿重复提交。": "Check Tasks for the result; do not resubmit.",
+  "正在准备参考素材…": "Preparing references…",
+  "正在提交生成任务，请勿重复点击…": "Submitting task; do not click again…",
+  "任务响应缺少 ID，请先到任务记录确认。": "Task response has no ID. Check Tasks first.",
+  "提交状态未知，请在任务记录确认结果，勿重复提交。": "Submission status unknown. Check Tasks and do not resubmit.",
+  "请先确认任务记录没有本次任务。解除锁定可能造成重复计费，仍要继续吗？": "Confirm this task is absent from Tasks first. Unlocking can cause duplicate charges. Continue?",
+  "任务": "Task",
+  "已等待": "Waited",
+  "任务详情": "Task details",
+  "关闭详情": "Close details",
+  "详情 / 预览": "Details / preview",
+  "尚无可预览媒体": "No previewable media yet",
+  "媒体已清理；任务记录仍保留。": "Media was cleaned up; task record retained.",
+  "媒体不可用或链接不安全": "Media unavailable or unsafe URL",
+  "媒体状态未知，请刷新详情。": "Media state unknown. Refresh details.",
+  "生成结果": "Generated result",
+  "媒体加载失败，可能已被清理，请刷新详情。": "Media failed to load and may have been cleaned up. Refresh details.",
+  "打开结果": "Open result",
+  "正在读取任务详情…": "Loading task details…",
+  "任务详情响应不完整。": "Incomplete task detail response.",
+  "发送给上游的提示词": "Prompt sent upstream",
+  "生成目标（非实际像素保证）": "Generation target (not guaranteed pixels)",
+  "账号尝试记录": "Account attempt history",
+  "刷新详情": "Refresh details",
+  "任务详情加载失败": "Failed to load task details"
+});
 const I18N_EN_HTML = {
   "extension-upgrade-notice": "<b>Important: manually upgrade the extension to 1.0.2</b><br>Updating the service does not update unpacked extensions. Replace files in the original folder and click Reload at <code>chrome://extensions</code> or <code>edge://extensions</code>, separately for each browser profile.<br><a href=\"/admin/extension\" download=\"muse2api-chrome-extension.zip\">Download extension 1.0.2</a>; upgrade the userscript to 1.1.2.",
   "repo-status-desc": "Comparing your local version with the latest version in the official GitHub repository… (online upgrades keep your <code>.env</code> keys and the <code>data/</code> Account Pool and media data)",
@@ -1825,6 +1935,7 @@ function cp(el){
 /* ================= 页签 ================= */
 function goTab(name){
   if (name === 'cookie') name = 'login';
+  if (name === 'media') name = 'tasks';
   const b = document.querySelector(`nav.tabs button[data-t="${name}"]`);
   if (b) b.click();
 }
@@ -1841,7 +1952,6 @@ document.querySelectorAll('nav.tabs button').forEach(b => {
     if (b.dataset.t === 'maintenance') { loadMaintenanceSettings(); loadCleanupSettings(); }
     if (b.dataset.t === 'logs') loadLogs();
     resumeAutomationViews();
-    if (b.dataset.t === 'media') loadMedia();
     if (b.dataset.t === 'login') $('cmdText').textContent = buildCmd($('inBase').value);
   };
 });
@@ -2064,7 +2174,15 @@ async function cancelLoginBatch(){
 const loginPoller = boundedPoller(() => activeAutomationTab('login'),loginHasWork,fetchLoginBatch,() => automationMessage('loginMessage',t('自动刷新已停止，请手动刷新状态。'),true));
 
 /* ================= 周期维护设置 ================= */
-let maintenanceState = {}, maintenanceSettings = null, maintenanceLoading = false, maintenanceSaving = false, maintenanceQueued = false;
+let maintenanceState = {}, maintenanceSettings = null, maintenanceLoading = false, maintenanceSaving = false, maintenanceQueued = false, poolRefreshRequested = false;
+function poolRefreshSummary(result){
+  if(!result)return t('刷新结束，未返回详细结果。');
+  const refreshed=Array.isArray(result.refreshed)?result.refreshed:[],skipped=Array.isArray(result.skipped)?result.skipped:[];
+  const failed=refreshed.filter(row=>row.ok===false&&!row.busy),busy=[...refreshed,...skipped].filter(row=>row.busy);
+  const summary=t('全部刷新完成')+' · '+t('成功')+' '+refreshed.filter(row=>row.ok===true).length+' · '+t('失败')+' '+failed.length+' · '+t('忙碌跳过')+' '+busy.length+' · '+t('其他跳过')+' '+skipped.filter(row=>!row.busy).length;
+  const errors=[...failed,...busy].map(row=>safeAutomationText(row.label||row.id||'')+': '+safeAutomationText(row.error||row.reason||t('账号忙碌')));
+  return summary+(errors.length?'\n'+errors.join('\n'):'');
+}
 function renderMaintenanceState(data){
   maintenanceState = safeDiagnostic(data.state || data || {});
   const state = maintenanceState;
@@ -2123,20 +2241,30 @@ async function saveMaintenanceSettings(event){
 async function fetchMaintenanceState(signal){
   const data = await automationApi('/admin/keepalive/status',{signal}); if (signal?.aborted) return;
   maintenanceQueued = false; renderMaintenanceState(data);
-  if (!maintenanceState.running) maintenancePoller.pause();
+  if (!maintenanceState.running) {
+    maintenancePoller.pause();
+    if(poolRefreshRequested){poolRefreshRequested=false;await loadPool();const result=maintenanceState.last_result;
+      automationMessage('poolRefreshMessage',poolRefreshSummary(result),!!result?.refreshed?.some(row=>row.ok===false)||!!result?.skipped?.some(row=>row.busy));}
+  }
 }
 async function runMaintenance(){
-  if (maintenanceState.running || maintenanceQueued) return;
-  maintenanceQueued = true; $('maintenanceRun').disabled = true; $('btnKeepaliveAll').disabled = true;
+  if (maintenanceState.running || maintenanceQueued) {automationMessage('poolRefreshMessage',t('刷新正在执行，请等待当前维护完成。'),true);return;}
+  maintenanceQueued = true;poolRefreshRequested=true; $('maintenanceRun').disabled = true; $('btnKeepaliveAll').disabled = true;
+  automationMessage('poolRefreshMessage',t('正在刷新启用账号，会话与额度将在后台更新…'));
   try {
-    await automationApi('/admin/maintenance/run',{method:'POST'});
-    automationMessage('maintenanceMessage',t('维护已排队，将按已保存设置在后台执行。'));
-    toast(t('维护已排队，将按已保存设置在后台执行。'),'ok');
+    const queued = await automationApi('/admin/maintenance/run',{method:'POST',body:JSON.stringify({force_refresh:true})});
+    if(queued?.status==='busy'){
+      maintenanceQueued=false;maintenanceState.running=true;renderMaintenanceState({state:maintenanceState,settings:maintenanceSettings});
+      automationMessage('poolRefreshMessage',t('刷新正在执行，请等待当前维护完成。'),true);automationMessage('maintenanceMessage',t('刷新正在执行，请等待当前维护完成。'),true);
+      maintenancePoller.reset();maintenancePoller.schedule();return;
+    }
+    automationMessage('maintenanceMessage',t('全部刷新已排队，即使自动维护关闭也会刷新启用账号。'));
+    toast(t('全部刷新已排队，即使自动维护关闭也会刷新启用账号。'),'ok');
     renderMaintenanceState({state:maintenanceState,settings:maintenanceSettings}); maintenancePoller.reset(); maintenancePoller.schedule();
-  } catch (error) { maintenanceQueued = false; renderMaintenanceState({state:maintenanceState}); automationError('maintenanceMessage','维护执行失败',error); }
+  } catch (error) { maintenanceQueued = false;poolRefreshRequested=false; renderMaintenanceState({state:maintenanceState}); automationError('maintenanceMessage','维护执行失败',error);automationError('poolRefreshMessage','全部刷新失败',error); }
 }
 const maintenancePoller = boundedPoller(() => activeAutomationTab('maintenance') || activeAutomationTab('pool'),() => !!maintenanceState.running || maintenanceQueued,fetchMaintenanceState,() => {
-  maintenanceQueued = false; renderMaintenanceState({state:maintenanceState}); automationMessage('maintenanceMessage',t('自动刷新已停止，请手动刷新状态。'),true);
+  maintenanceQueued = false; renderMaintenanceState({state:maintenanceState}); automationMessage('maintenanceMessage',t('自动刷新已停止，请手动刷新状态。'),true);automationMessage('poolRefreshMessage',t('自动刷新已停止，请手动刷新状态。'),true);
 });
 $('maintenanceForm').addEventListener('submit',saveMaintenanceSettings);
 
@@ -2243,6 +2371,10 @@ async function checkNewVersion(){
 
 /* ================= 脱敏诊断日志与分页 ================= */
 let logsOffset = 0, logsNextOffset = null, logsHistory = [], logsQuery = '', logsRequest = null, logsGeneration = 0;
+function requestAccountHTML(record){
+  const id=record?.account_id,label=record?.account_label;
+  return '<span>'+esc(t('使用账号'))+'</span>：<span data-no-i18n>'+esc(id?(safeAutomationText(label||t('账号未命名'))+' · '+safeAutomationText(id)):t('队列 / 系统（未分配账号）'))+'</span>';
+}
 function logFilters(){ return {task_id:$('logsTaskId').value.trim(),account_id:$('logsAccountId').value.trim(),level:$('logsLevel').value.toLowerCase()}; }
 async function loadLogs(offset = 0){
   logsRequest?.abort(); const controller = new AbortController(); logsRequest = controller;
@@ -2266,7 +2398,7 @@ async function loadLogs(offset = 0){
       const level = String(entry.level || ''), cls = /ERROR|CRITICAL/i.test(level) ? 'bad' : /WARN/i.test(level) ? 'warn' : 'mute';
       return '<tr><td><div class="mono">' + esc(automationTime(entry.time)) + '</div><span class="badge ' + cls + '">' + esc(level) + '</span></td>' +
         '<td data-no-i18n>' + esc(entry.event) + '<div class="mono">' + esc(entry.stage) + '</div></td>' +
-        '<td class="mono" data-no-i18n>' + esc(entry.task_id) + '<br>' + esc(entry.account_id) + '</td>' +
+        '<td><div class="mono" data-no-i18n>' + esc(entry.task_id || t('队列 / 系统')) + '</div><div>' + requestAccountHTML(entry) + '</div>' + (entry.attempt != null ? '<div>' + esc(t('尝试')) + ' ' + esc(entry.attempt) + '</div>' : '') + '</td>' +
         '<td><div class="automation-message" data-no-i18n>' + esc(typeof (entry.message ?? entry.reason) === 'object' ? diagnosticJSON(entry.message ?? entry.reason) : (entry.message ?? entry.reason)) + '</div>' +
         '<details><summary>' + esc(t('安全详情')) + '</summary><pre data-no-i18n>' + esc(diagnosticJSON(entry)) + '</pre></details></td></tr>';
     }).join('') : '<tr><td colspan="4" class="empty">' + esc(t('暂无日志')) + '</td></tr>';
@@ -2280,10 +2412,10 @@ async function nextLogsPage(){ if (logsNextOffset == null) return; logsHistory.p
 async function previousLogsPage(){ if (!logsHistory.length) return; const offset = logsHistory.pop(); await loadLogs(offset); }
 function openTaskLogs(id){ $('logsTaskId').value = id; $('logsAccountId').value = ''; $('logsLevel').value = ''; goTab('logs'); }
 $('logsForm').addEventListener('submit',event => { event.preventDefault(); void loadLogs(); });
-function pauseAutomationViews(){ loginPoller.pause(); maintenancePoller.pause(); tasksPoller.pause(); logsRequest?.abort(); }
-function resumeAutomationViews(){ loginPoller.schedule(); maintenancePoller.schedule(); tasksPoller.schedule(); }
+function pauseAutomationViews(){ loginPoller.pause(); maintenancePoller.pause(); tasksPoller.pause(); logsRequest?.abort(); taskDetailRequest?.abort(); for(const poller of Object.values(generationPollers))poller.pause(); }
+function resumeAutomationViews(){ loginPoller.schedule(); maintenancePoller.schedule(); tasksPoller.schedule(); for(const poller of Object.values(generationPollers))poller.schedule(); }
 document.addEventListener('visibilitychange',() => { if (document.hidden) pauseAutomationViews(); else resumeAutomationViews(); });
-window.addEventListener('pagehide',() => { pauseAutomationViews(); clearLoginInputs(); clearCookieInputs(); });
+window.addEventListener('pagehide',() => { pauseAutomationViews(); clearLoginInputs(); clearCookieInputs();for(const kind of ['image','video'])clearGenerationReferences(kind,true);closeTaskDetail(); });
 
 /* ================= 接入信息 / API Key ================= */
 let realKey = '';
@@ -2403,45 +2535,50 @@ function quotaProgress(label,used){
     '<div class="quota-track' + (remaining == null ? ' unknown' : '') + '" role="progressbar" aria-label="' + esc(t(label)) + '" aria-valuemin="0" aria-valuemax="100" aria-valuetext="' + esc(text) + '"' +
     (remaining == null ? '' : ' aria-valuenow="' + remaining + '"') + '>' + (remaining == null ? '' : '<span class="quota-fill" style="width:' + remaining + '%;background-color:' + color + '"></span>') + '</div>';
 }
+function quotaResetText(quota,now=Date.now()){
+  const q=quota||{},raw=quotaRawText(q.weekly_reset);
+  if(typeof q.weekly_reset_at==='number'&&Number.isFinite(q.weekly_reset_at)&&q.weekly_reset_at>0&&q.weekly_reset_at<1e11){
+    const seconds=Math.floor(q.weekly_reset_at-now/1000);
+    return seconds<=0?t('已到重置时间，等待刷新'):t('还剩')+' '+Math.floor(seconds/86400)+' '+t('天')+' '+Math.floor(seconds%86400/3600)+' '+t('小时')+' · '+accountTime(q.weekly_reset_at);
+  }
+  if(typeof q.weekly_reset_date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(q.weekly_reset_date)){
+    try{
+      const zone=q.weekly_reset_timezone||'Asia/Shanghai',parts=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now));
+      const find=key=>parts.find(part=>part.type===key)?.value;
+      const today=Date.UTC(Number(find('year')),Number(find('month'))-1,Number(find('day'))),[y,m,d]=q.weekly_reset_date.split('-').map(Number),target=Date.UTC(y,m-1,d);
+      if(new Date(target).toISOString().slice(0,10)!==q.weekly_reset_date)return raw;
+      const days=Math.round((target-today)/86400000);
+      return (days<=0?t('已到重置日期，等待刷新'):t('还有')+' '+days+' '+t('天（日期）'))+' · '+q.weekly_reset_date+' ('+safeAutomationText(zone)+')';
+    }catch(error){return raw;}
+  }
+  return raw;
+}
 function quotaCardDetails(quota){
-  const q = quota || {};
-  return '<div class="account-quota">' + quotaProgress('周剩余额度',q.weekly_used_pct) +
-    '<div class="quota-reset"><span>' + esc(t('额度重置')) + '</span> <span class="quota-raw">(' + esc(t('上游原文')) + ')</span><br><b data-no-i18n>' + esc(quotaRawText(q.weekly_reset)) + '</b></div>' +
-    '<div class="account-extra">' + quotaProgress('额外剩余额度',q.extra_used_pct) +
-    '<div class="quota-reset"><span>' + esc(t('额外剩余')) + '</span>：<b data-no-i18n>' + esc(typeof q.extra_left === 'string' && q.extra_left.trim() ? safeAutomationText(q.extra_left) : t('未知')) + '</b></div>' +
-    '<div class="quota-reset"><span>' + esc(t('额外额度到期')) + '</span> <span class="quota-raw">(' + esc(t('上游原文')) + ')</span>：<b data-no-i18n>' + esc(quotaRawText(q.extra_expires)) + '</b></div></div></div>';
+  const q=quota||{};
+  return '<div class="account-quota">'+quotaProgress('周剩余额度',q.weekly_used_pct)+'<div class="quota-reset"><span>'+esc(t('额度重置'))+'</span>：<b data-no-i18n>'+esc(quotaResetText(q))+'</b></div>'+
+    (q.extra_used_pct!=null||q.extra_left||q.extra_expires?'<details class="account-extra"><summary>'+esc(t('额外额度详情'))+'</summary>'+quotaProgress('额外剩余额度',q.extra_used_pct)+'<div class="quota-reset" data-no-i18n>'+esc(quotaRawText(q.extra_left))+' · '+esc(quotaRawText(q.extra_expires))+'</div></details>':'')+'</div>';
 }
 function expiryBadge(account){
-  const date = accountTimestamp(account?.expires_at);
-  if (!date) return '<span class="badge mute">' + esc(t('未知')) + '</span>';
-  const expired = date.getTime() <= Date.now(), label = expired ? '已过期' : account.expires_estimated ? '估算有效期' : '已记录到期时间，不代表会话认证有效';
-  return '<span class="badge ' + (expired ? 'warn' : 'mute') + '" title="' + esc(t('已记录到期时间，不代表会话认证有效')) + '">' + esc(t(label)) + '</span>';
+  const date=accountTimestamp(account?.expires_at);
+  if(!date)return esc(t('有效期待确认'));
+  const expired=date.getTime()<=Date.now(),label=expired?'已记录到期，认证待确认':account.expires_estimated?'估算有效期':'有效期';
+  return '<span title="'+esc(accountTime(account.expires_at)+' · '+t('已记录到期时间，不代表会话认证有效'))+'">'+esc(t(label))+' · '+esc(date.toLocaleDateString(LANG==='en'?'en-GB':'zh-CN',{timeZone:'Asia/Shanghai'}))+'</span>';
 }
 function accountProxyText(account){
-  if (!account.proxy?.server) return t('未配置代理');
-  try { const proxy = new URL(account.proxy.server); return proxy.protocol + '//' + proxy.host; }
-  catch (error) { return t('代理地址不可识别'); }
+  if(!account.proxy?.server)return t('未配置代理');
+  try{const proxy=new URL(account.proxy.server);return proxy.protocol+'//'+proxy.host;}catch(error){return t('代理地址不可识别');}
 }
 function accountCard(account){
-  const q = account.quota || {}, id = esc(account.id), enabled = !!account.enabled;
-  const status = !enabled ? '已禁用' : account.ok === true ? '● 可用' : account.ok === false ? '● 异常' : '○ 未检测';
-  const cls = !enabled ? 'mute' : account.ok === true ? 'ok' : account.ok === false ? 'bad' : 'warn';
-  const plan = typeof q.plan === 'string' && q.plan.trim() ? safeAutomationText(q.plan) : t('未知');
-  const action = (name,label,danger=false) => '<button type="button" class="' + (danger ? 'danger' : 'ghost') + ' mini" data-account-action="' + name + '" data-account-id="' + id + '">' + esc(t(label)) + '</button>';
-  const time = (label,value) => '<div><dt>' + esc(t(label)) + '</dt><dd class="mono">' + esc(accountTime(value)) + '</dd></div>';
-  const old = accountTimestamp(q.checked_at) && Date.now() - accountTimestamp(q.checked_at).getTime() > 3600000;
-  return '<article class="account-card' + (!enabled ? ' is-disabled' : account.ok === false ? ' is-error' : '') + '" data-account-card="' + id + '">' +
-    '<div class="account-top"><div class="account-identity"><h4 data-no-i18n>' + esc(safeAutomationText(account.label || account.id)) + '</h4><div class="account-id mono" data-no-i18n>' + id + '</div></div><div class="account-plan" title="' + esc(t('套餐')) + '" data-no-i18n>' + esc(plan) + '</div></div>' +
-    '<div class="account-status"><span class="badge ' + cls + '">' + esc(t(status)) + '</span>' +
-    '<span class="badge mute">' + esc(t('Cookie 数量')) + ' · ' + (Number.isInteger(account.cookie_count) && account.cookie_count >= 0 ? account.cookie_count : esc(t('未知'))) + '</span>' +
-    (account.essential_ok === false ? '<span class="badge bad">' + esc(t('缺核心')) + '</span>' : '') + '</div>' + quotaCardDetails(q) +
-    (account.quota_error ? '<div class="account-quota-error"><span>' + esc(t('额度查询失败，保留上次成功快照')) + '</span><div data-no-i18n>' + esc(safeAutomationText(account.quota_error)) + '</div></div>' : old ? '<div class="account-quota-error">' + esc(t('额度快照超过 1 小时，请重新查询')) + '</div>' : '') +
-    '<dl class="account-times"><div><dt>' + esc(t('Cookie 有效期')) + '</dt><dd class="mono">' + esc(accountTime(account.expires_at)) + '<div>' + expiryBadge(account) + '</div></dd></div>' +
-    time('最近额度查询',q.checked_at) + time('最近保活成功',account.last_keepalive) + time('最近业务使用',account.last_used) + '</dl>' +
-    '<div class="account-proxy"><span>' + esc(t('代理')) + '</span> · <span class="mono" data-no-i18n>' + esc(accountProxyText(account)) + '</span>' + proxyStatus(account) + '</div>' +
-    (account.note ? '<p class="account-note" data-no-i18n>' + esc(safeAutomationText(account.note)) + '</p>' : '') +
-    '<div class="account-actions">' + action('test','测试') + action('keepalive','保活') + action('quota','刷新额度') + action('proxy','代理') +
-    action('toggle',enabled ? '禁用' : '启用') + action('rename','改名') + action('cookies','更新Cookie') + action('delete','删除',true) + '</div></article>';
+  const q=account.quota||{},id=esc(account.id),enabled=!!account.enabled;
+  const status=!enabled?'已禁用':account.ok===true?'● 可用':account.ok===false?'● 异常':'○ 未检测',cls=!enabled?'mute':account.ok===true?'ok':account.ok===false?'bad':'warn';
+  const plan=typeof q.plan==='string'&&q.plan.trim()?safeAutomationText(q.plan):t('未知');
+  const action=(name,label,danger=false)=>'<button type="button" class="'+(danger?'danger':'ghost')+' mini" data-account-action="'+name+'" data-account-id="'+id+'">'+esc(t(label))+'</button>';
+  return '<article class="account-card'+(!enabled?' is-disabled':account.ok===false?' is-error':'')+'" data-account-card="'+id+'">'+
+    '<div class="account-top"><div class="account-identity"><h4 data-no-i18n>'+esc(safeAutomationText(account.label||account.id))+'</h4></div><div class="account-plan" title="'+esc(t('套餐'))+'" data-no-i18n>'+esc(plan)+'</div></div>'+
+    '<div class="account-status"><span class="badge '+cls+'">'+esc(t(status))+'</span></div>'+quotaCardDetails(q)+
+    (account.quota_error?'<details class="account-quota-error"><summary>'+esc(t('额度查询失败，保留上次成功快照'))+'</summary><span data-no-i18n>'+esc(safeAutomationText(account.quota_error))+'</span></details>':'')+
+    '<div class="account-note">'+esc(t('最近额度查询'))+'：<span data-no-i18n>'+esc(accountTime(q.checked_at))+'</span><br>'+expiryBadge(account)+'</div>'+
+    '<div class="account-actions">'+action('toggle',enabled?'禁用':'启用')+action('delete','删除',true)+'</div></article>';
 }
 async function handleAccountAction(event){
   const button = event.target.closest('button[data-account-action]');
@@ -2693,52 +2830,76 @@ async function delAcc(id, label){
 }
 
 /* ================= 任务记录 ================= */
-let tasksHaveWork = false;
+let tasksHaveWork = false,taskDetailRequest=null,taskDetailGeneration=0;
 const TASK_TERMINAL = new Set(['succeeded','completed','failed','cancelled','canceled','interrupted']);
 function safeTaskResultURL(raw){
-  if (typeof raw !== 'string' || !raw.trim()) return '';
-  try { const url = new URL(raw,location.origin); return ['http:','https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
-  catch (error) { return ''; }
+  if(typeof raw!=='string'||!raw.trim()||/[\u0000-\u0020\u007f\\]/.test(raw))return '';
+  try{const url=new URL(raw,location.origin);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:'';}catch(error){return '';}
+}
+function taskMediaHTML(media,preview=false){
+  if(!media)return '<p class="task-media-note">'+esc(t('尚无可预览媒体'))+'</p>';
+  if(media.exists===false||media.availability==='deleted')return '<p class="task-media-note">'+esc(t('媒体已清理；任务记录仍保留。'))+'</p>';
+  const url=safeTaskResultURL(media.url);
+  if(!url||!['image','video','audio'].includes(media.kind))return '<p class="task-media-note">'+esc(t('媒体不可用或链接不安全'))+'</p>';
+  if(media.exists!==true&&media.availability!=='available')return '<p class="task-media-note">'+esc(t('媒体状态未知，请刷新详情。'))+'</p>';
+  if(!preview)return '<span>'+esc(t(media.kind==='video'?'视频':media.kind==='audio'?'音频':'图片'))+' · '+esc(fmtBytes(media.bytes))+'</span>';
+  const player=media.kind==='image'?'<img src="'+esc(url)+'" loading="lazy" decoding="async" alt="'+esc(t('生成结果'))+'">':media.kind==='video'?'<video src="'+esc(url)+'" controls playsinline preload="metadata"></video>':'<audio src="'+esc(url)+'" controls preload="metadata"></audio>';
+  const dimensions=Number.isInteger(media.width)&&Number.isInteger(media.height)?media.width+'x'+media.height:'';
+  return '<div class="task-media">'+player+'<div class="task-media-note" hidden>'+esc(t('媒体加载失败，可能已被清理，请刷新详情。'))+'</div><div class="mono">'+esc(fmtBytes(media.bytes))+(dimensions?' · '+esc(dimensions):'')+'</div><a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(t('打开结果'))+'</a></div>';
+}
+function taskErrorHTML(error){
+  if(!error)return '';
+  const message=safeAutomationText(typeof error==='object'?diagnosticJSON(error):error);
+  return '<details class="task-error" open><summary>'+esc(t('错误详情'))+'</summary><pre data-no-i18n>'+esc(message)+'</pre></details>';
 }
 async function loadTasks(signal){
-  if (!signal) tasksPoller.reset();
+  if(!signal)tasksPoller.reset();
   try{
-    const d = await automationApi('/admin/tasks?limit=60',{signal});
-    if (signal?.aborted) return;
-    const tasks = Array.isArray(d?.tasks) ? d.tasks : [];
-    tasksHaveWork = tasks.some(task => !TASK_TERMINAL.has(task.status));
-    if (!tasksHaveWork) tasksPoller.pause();
-    $('taskCount').textContent = tasks.length;
-    if (!tasks.length){ $('taskBody').innerHTML = '<tr><td colspan="8" class="empty">' + esc(t('暂无任务记录')) + '</td></tr>'; return; }
-    $('taskBody').innerHTML = tasks.map(task => {
-      const cls = ['succeeded','completed'].includes(task.status) ? 'ok' : task.status === 'failed' ? 'bad' : 'info';
-      const id = esc(task.id), url = safeTaskResultURL(task.result?.url);
-      let out = '—';
-      if (task.error) {
-        const message = safeAutomationText(typeof task.error === 'object' ? diagnosticJSON(task.error) : task.error);
-        out = '<span style="color:var(--bad)" data-no-i18n>' + esc(message.slice(0,120)) + '</span><details class="task-error"><summary>' + esc(t('错误详情')) + '</summary><pre data-no-i18n>' + esc(message) + '</pre></details>';
-      } else if (url) out = '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(t('查看结果')) + '</a> <span class="mono">' + esc(fmtBytes(task.result.bytes)) + '</span>';
-      return '<tr><td class="mono" data-no-i18n>' + id + '</td>' +
-        '<td><span class="badge info">' + esc(t(task.kind === 'video' ? '视频' : '图片')) + '</span></td>' +
-        '<td><span class="ellip" data-no-i18n title="' + esc(task.prompt) + '">' + esc(task.prompt) + '</span></td>' +
-        '<td><span class="badge ' + cls + '" data-no-i18n>' + esc(task.status) + '</span></td>' +
-        '<td class="mono">' + esc(task.elapsed ? String(task.elapsed) + 's' : '—') + '</td>' +
-        '<td class="mono">' + esc(automationTime(task.created_at)) + '</td><td>' + out + '</td>' +
-        '<td><div class="acts"><button class="ghost mini" data-task-logs="' + id + '">' + esc(t('查看日志')) + '</button><button class="danger mini" data-task-delete="' + id + '">' + esc(t('删')) + '</button></div></td></tr>';
-    }).join('');
-    tasksPoller.schedule();
-  }catch(error){
-    if (signal?.aborted) return;
-    $('taskBody').innerHTML = '<tr><td colspan="8" class="empty">' + esc(t('加载失败：') + safeAutomationText(error.message)) + '</td></tr>';
-    if (signal) throw error;
-  }
+    const d=await automationApi('/admin/tasks?limit=60',{signal});if(signal?.aborted)return;
+    const tasks=(Array.isArray(d?.tasks)?d.tasks:[]).slice(0,60);tasksHaveWork=tasks.some(task=>!TASK_TERMINAL.has(task.status));
+    if(!tasksHaveWork)tasksPoller.pause();$('taskCount').textContent=tasks.length;
+    if(!tasks.length){$('taskBody').innerHTML='<tr><td colspan="8" class="empty">'+esc(t('暂无任务记录'))+'</td></tr>';return;}
+    $('taskBody').innerHTML=tasks.map(task=>{
+      const cls=['succeeded','completed'].includes(task.status)?'ok':task.status==='failed'?'bad':'info',id=esc(task.id);
+      const out=task.error?taskErrorHTML(task.error):taskMediaHTML(task.media,false);
+      return '<tr><td class="mono" data-no-i18n>'+id+'</td><td><span class="badge info">'+esc(t(task.kind==='video'?'视频':task.kind==='audio'?'音频':'图片'))+'</span></td>'+
+        '<td><span class="ellip" data-no-i18n title="'+esc(task.prompt)+'">'+esc(task.prompt)+'</span><div>'+requestAccountHTML(task)+'</div></td>'+
+        '<td><span class="badge '+cls+'" data-no-i18n>'+esc(task.status)+'</span></td><td class="mono">'+esc(task.elapsed?String(task.elapsed)+'s':'—')+'</td>'+
+        '<td class="mono">'+esc(automationTime(task.created_at))+'</td><td>'+out+'</td><td><div class="acts">'+
+        '<button type="button" class="ghost mini" data-task-detail="'+id+'">'+esc(t('详情 / 预览'))+'</button><button type="button" class="ghost mini" data-task-logs="'+id+'">'+esc(t('查看日志'))+'</button><button type="button" class="danger mini" data-task-delete="'+id+'">'+esc(t('删'))+'</button></div></td></tr>';
+    }).join('');tasksPoller.schedule();
+  }catch(error){if(signal?.aborted)return;$('taskBody').innerHTML='<tr><td colspan="8" class="empty">'+esc(t('加载失败：')+safeAutomationText(error.message))+'</td></tr>';if(signal)throw error;}
 }
-const tasksPoller = boundedPoller(() => activeAutomationTab('tasks'),() => tasksHaveWork,loadTasks,() => toast(t('自动刷新已停止，请手动刷新状态。'),'warn'));
-$('taskBody').addEventListener('click',event => {
-  const logs = event.target.closest('button[data-task-logs]'), remove = event.target.closest('button[data-task-delete]');
-  if (logs) openTaskLogs(logs.dataset.taskLogs);
-  if (remove) void delTask(remove.dataset.taskDelete);
-});
+function closeTaskDetail(){taskDetailGeneration++;taskDetailRequest?.abort();taskDetailRequest=null;$('taskDetail').hidden=true;$('taskDetailBody').replaceChildren();}
+async function openTaskDetail(id){
+  taskDetailRequest?.abort();const controller=new AbortController();taskDetailRequest=controller;const version=++taskDetailGeneration;
+  $('taskDetail').hidden=false;$('taskDetailBody').textContent=t('正在读取任务详情…');
+  try{
+    const data=await automationApi('/admin/tasks/'+encodeURIComponent(id),{signal:controller.signal});
+    if(controller.signal.aborted||version!==taskDetailGeneration)return;
+    const task=data?.task;if(!task||typeof task!=='object')throw new Error(t('任务详情响应不完整。'));
+    const generation=task.generation||{},prompt=typeof task.prompt==='object'?JSON.stringify(task.prompt):String(task.prompt||'');
+    const params=Object.fromEntries(['size','aspect_ratio','resolution','duration','reference_counts'].filter(key=>generation[key]!=null).map(key=>[key,generation[key]]));
+    $('taskDetailBody').innerHTML='<div class="mono" data-no-i18n>'+esc(task.id)+' · '+esc(task.status)+'</div><div>'+requestAccountHTML(task)+'</div>'+
+      '<h4>'+esc(t('提示词'))+'</h4><pre data-no-i18n>'+esc(prompt)+'</pre>'+
+      (task.api_prompt?'<details><summary>'+esc(t('发送给上游的提示词'))+'</summary><pre data-no-i18n>'+esc(typeof task.api_prompt==='object'?JSON.stringify(task.api_prompt):task.api_prompt)+'</pre></details>':'')+
+      '<h4>'+esc(t('生成目标（非实际像素保证）'))+'</h4><pre data-no-i18n>'+esc(JSON.stringify(params,null,2))+'</pre>'+taskErrorHTML(task.error)+taskMediaHTML(task.media,true)+
+      (Array.isArray(task.attempts)&&task.attempts.length?'<details><summary>'+esc(t('账号尝试记录'))+'</summary><pre data-no-i18n>'+esc(diagnosticJSON(task.attempts))+'</pre></details>':'')+
+      '<div class="automation-actions"><button type="button" class="ghost mini" data-task-logs="'+esc(id)+'">'+esc(t('查看日志'))+'</button><button type="button" class="ghost mini" data-task-detail="'+esc(id)+'">'+esc(t('刷新详情'))+'</button></div>';
+  }catch(error){if(!controller.signal.aborted&&version===taskDetailGeneration)$('taskDetailBody').textContent=t('任务详情加载失败')+': '+safeAutomationText(error.message);}
+  finally{if(version===taskDetailGeneration)taskDetailRequest=null;}
+}
+function taskAction(event){
+  const logs=event.target.closest('button[data-task-logs]'),remove=event.target.closest('button[data-task-delete]'),detail=event.target.closest('button[data-task-detail]');
+  if(logs)openTaskLogs(logs.dataset.taskLogs);if(remove)void delTask(remove.dataset.taskDelete);if(detail)void openTaskDetail(detail.dataset.taskDetail);
+}
+function taskMediaError(event){
+  const media=event.target;if(!['IMG','VIDEO','AUDIO'].includes(media.tagName))return;
+  const container=media.closest('.task-media');if(!container)return;media.hidden=true;const note=container.querySelector('.task-media-note');if(note)note.hidden=false;
+}
+const tasksPoller=boundedPoller(()=>activeAutomationTab('tasks'),()=>tasksHaveWork,loadTasks,()=>toast(t('自动刷新已停止，请手动刷新状态。'),'warn'));
+$('taskBody').addEventListener('click',taskAction);$('taskDetailBody').addEventListener('click',taskAction);
+for(const id of ['taskDetailBody','imgRes','vidRes'])$(id).addEventListener('error',taskMediaError,true);
 async function delTask(id){
   try{ await api('/admin/tasks/' + encodeURIComponent(id), {method:'DELETE'}); loadTasks(); }
   catch(e){ toast('删除失败：' + e.message, 'bad'); }
@@ -2751,227 +2912,207 @@ async function clearTasks(){
   }catch(e){ toast('清空失败：' + e.message, 'bad'); }
 }
 
-/* ================= 媒体库 ================= */
-let _allMedia = [];
-let _selectedMedia = new Set();
-
-function updateMediaSelectionUI(){
-  const count = _selectedMedia.size;
-  const total = _allMedia.length;
-  const btnSelAll = $('btnSelectAllMedia');
-  const btnDel = $('btnDelSelectedMedia');
-  const countEl = $('selMediaCount');
-
-  if (countEl) countEl.textContent = count;
-  if (btnDel) {
-    btnDel.style.display = count > 0 ? 'inline-flex' : 'none';
+/* ================= 在线测试：几何、内存素材与有限异步轮询 ================= */
+const REFERENCE_ORDER = ['images','videos','audios','files'];
+const REFERENCE_LIMITS = {count:10,single:40*1024*1024,total:100*1024*1024,videoSeconds:120};
+const REFERENCE_EXTENSIONS = {images:/\.(jpe?g|png|gif|webp|heic|heif|avif)$/i,videos:/\.(mp4|mov|webm|3gp)$/i,audios:/\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i,files:/\.(pdf|docx?)$/i};
+const REFERENCE_MIMES = {images:/^image\/(jpeg|jpg|pjpeg|png|gif|webp|heic|heif|avif)$/i,videos:/^video\/(mp4|quicktime|webm|3gpp|x-m4v|mov)$/i,audios:/^audio\/(mpeg|mp3|x-mp3|mpeg3|wav|x-wav|wave|vnd\.wave|mp4|m4a|x-m4a|ogg|flac|x-flac|aac|x-aac|aacp|opus)$/i,files:/^application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/i};
+let referenceSequence = 0;
+function newGenerationState(){ return {references:{images:[],videos:[],audios:[],files:[]},referenceVersion:0,pendingReferences:[],adding:false,submitting:false,id:null,status:null,uncertain:false,started:0,geometry:null}; }
+const generationState = {image:newGenerationState(),video:newGenerationState()};
+function generationPrefix(kind){ return kind === 'video' ? 'vid' : 'img'; }
+function greatestCommonDivisor(a,b){ while(b){ const n=a%b; a=b; b=n; } return a; }
+function computeGenerationGeometry(kind,ratio,resolution,customRatio,width,height){
+  let w,h;
+  const preset = /^(\d+)x(\d+)$/.exec(resolution || '');
+  if (preset) { w=Number(preset[1]); h=Number(preset[2]); }
+  else if (resolution === 'custom' || ratio === 'dimensions') { w=Number(width); h=Number(height); }
+  else {
+    if (!['1K','2K'].includes(resolution)) throw new Error(t('请选择有效的分辨率目标。'));
+    const raw = ratio === 'auto' ? '1:1' : ratio === 'custom' ? String(customRatio || '').trim() : ratio;
+    const match = /^(\d{1,5}(?:\.\d{1,3})?)\s*:\s*(\d{1,5}(?:\.\d{1,3})?)$/.exec(raw || '');
+    if (!match) throw new Error(t('请输入有效的宽高比，如 7:5。'));
+    let a=Math.round(Number(match[1])*1000), b=Math.round(Number(match[2])*1000);
+    if (a<=0 || b<=0) throw new Error(t('请输入有效的宽高比，如 7:5。'));
+    const gcd=greatestCommonDivisor(a,b); a/=gcd; b/=gcd;
+    const scale=Math.floor((resolution === '2K' ? 2048 : 1024)/Math.max(a,b));
+    w=a*scale; h=b*scale;
   }
-  if (btnSelAll) {
-    btnSelAll.textContent = (total > 0 && count === total) ? '取消全选' : '全选';
+  if (![w,h].every(n=>Number.isInteger(n)&&n>=64&&n<=8192)) throw new Error(t('宽高必须是 64–8192 的整数，且比例需能组成有效尺寸。'));
+  const gcd=greatestCommonDivisor(w,h), size=w+'x'+h;
+  return {aspect_ratio:(w/gcd)+':'+(h/gcd),size,resolution:size,width:w,height:h};
+}
+function readGenerationGeometry(kind){
+  const p=generationPrefix(kind);
+  return computeGenerationGeometry(kind,$(p+'Ratio').value,$(p+'Resolution').value,$(p+'CustomRatio').value,$(p+'Width').value,$(p+'Height').value);
+}
+function syncGenerationGeometry(kind,source){
+  const p=generationPrefix(kind), ratio=$(p+'Ratio'), resolution=$(p+'Resolution');
+  if (source === 'resolution') {
+    const dims=/^(\d+)x(\d+)$/.exec(resolution.value);
+    if (dims) { ratio.value='dimensions'; $(p+'Width').value=dims[1]; $(p+'Height').value=dims[2]; }
+    else if (resolution.value === 'custom') ratio.value='dimensions';
+    else if (ratio.value === 'dimensions') ratio.value='auto';
+  } else if (source === 'ratio') {
+    if (ratio.value === 'dimensions') resolution.value='custom';
+    else if (!['1K','2K'].includes(resolution.value)) resolution.value='1K';
   }
-
-  document.querySelectorAll('.tile[data-name]').forEach(el => {
-    const name = el.getAttribute('data-name');
-    const chk = el.querySelector('.tile-check');
-    const isSel = _selectedMedia.has(name);
-    if (chk) chk.checked = isSel;
-    if (isSel) el.classList.add('selected');
-    else el.classList.remove('selected');
+  $(p+'CustomRatioWrap').hidden=ratio.value!=='custom';
+  $(p+'Width').disabled=$(p+'Height').disabled=resolution.value!=='custom';
+  try {
+    const geometry=readGenerationGeometry(kind);
+    $(p+'Width').value=geometry.width; $(p+'Height').value=geometry.height;
+    $(p+'Geometry').textContent=t('实际提交目标')+': '+geometry.aspect_ratio+' · '+geometry.size+' · '+t('非实际像素保证');
+    $(p+'Geometry').classList.remove('error');
+  } catch(error){ automationError(p+'Geometry','参数有误',error); }
+}
+function referenceEntries(kind){ return REFERENCE_ORDER.flatMap(group=>generationState[kind].references[group]); }
+function validateGenerationFiles(kind,group,files){
+  if (!REFERENCE_ORDER.includes(group) || (kind==='image'&&group==='videos')) throw new Error(t('该生成类型不支持此参考素材。'));
+  const current=referenceEntries(kind);
+  if (current.length+files.length>REFERENCE_LIMITS.count) throw new Error(t('参考素材最多 10 个。'));
+  let total=current.reduce((sum,item)=>sum+item.file.size,0);
+  for (const file of files) {
+    if (!Number.isInteger(file.size)||file.size<=0||file.size>REFERENCE_LIMITS.single) throw new Error(t('单个参考素材必须非空且不超过 40 MiB。'));
+    const mime=String(file.type||'').split(';')[0];
+    if (!(REFERENCE_MIMES[group].test(mime)||(!mime||mime==='application/octet-stream')&&REFERENCE_EXTENSIONS[group].test(file.name||''))) throw new Error(t('参考文件类型不受支持。'));
+    total+=file.size;
+  }
+  if (total>REFERENCE_LIMITS.total) throw new Error(t('参考素材总大小不能超过 100 MiB。'));
+}
+function releaseReference(item){
+  item.cancelMetadata?.();item.cancelMetadata=null;
+  item.reader?.abort(); item.reader=null; item.data=null; item.dataPromise=null;
+  if (item.preview) { URL.revokeObjectURL(item.preview); item.preview=''; }
+}
+function renderGenerationReferences(kind){
+  const p=generationPrefix(kind), state=generationState[kind], names={images:'图',videos:'视频',audios:'音频',files:'文档'};
+  $(p+'ReferenceList').innerHTML=REFERENCE_ORDER.flatMap(group=>state.references[group].map((item,index)=>{
+    const preview=item.preview ? group==='images' ? '<img src="'+esc(item.preview)+'" alt="" loading="lazy">' : group==='audios' ? '<audio src="'+esc(item.preview)+'" controls preload="metadata"></audio>' : group==='videos' ? '<video src="'+esc(item.preview)+'" controls playsinline preload="metadata"></video>' : '' : '';
+    return '<li><div class="reference-item">'+preview+'<span data-no-i18n>['+esc(names[group])+(index+1)+']</span><span class="mono" data-no-i18n>'+esc(item.file.name)+' · '+esc(fmtBytes(item.file.size))+'</span><button type="button" class="ghost mini" data-ref-kind="'+kind+'" data-ref-id="'+item.id+'">'+esc(t('移除'))+'</button></div></li>';
+  })).join('');
+}
+async function referenceVideoDuration(item){
+  return await new Promise((resolve,reject)=>{
+    const video=document.createElement('video');let timer,finished=false;
+    function finish(error){if(finished)return;finished=true;clearTimeout(timer);item.cancelMetadata=null;video.onloadedmetadata=video.onerror=null;video.removeAttribute('src');video.load?.();error?reject(error):resolve();}
+    item.cancelMetadata=()=>finish(new Error(t('已清空参考素材。')));
+    video.preload='metadata';
+    video.onloadedmetadata=()=>{const d=video.duration;finish(!Number.isFinite(d)||d<=0||d>REFERENCE_LIMITS.videoSeconds?new Error(t('参考视频必须有有效时长且不超过 120 秒。')):null);};
+    video.onerror=()=>finish(new Error(t('无法读取参考视频时长，请换用有效的 MP4 / MOV / WebM / 3GP。')));
+    timer=setTimeout(()=>finish(new Error(t('读取参考视频超时。'))),10000);video.src=item.preview;
   });
 }
-
-function toggleMediaSelect(name){
-  if (_selectedMedia.has(name)) {
-    _selectedMedia.delete(name);
+async function addGenerationFiles(kind,group,input){
+  const state=generationState[kind], p=generationPrefix(kind), files=Array.from(input.files||[]); input.value='';
+  if (state.submitting||state.adding||state.id&&!TASK_TERMINAL.has(state.status)||state.uncertain) return;
+  state.adding=true; const pending=[],version=state.referenceVersion;state.pendingReferences=pending;
+  try {
+    validateGenerationFiles(kind,group,files);
+    for (const file of files) {
+      const item={id:String(++referenceSequence),group,file,data:null,dataPromise:null,reader:null,preview:group==='files'?'':URL.createObjectURL(file)}; pending.push(item);
+      if (group==='videos') await referenceVideoDuration(item);
+    }
+    if(version!==state.referenceVersion){pending.forEach(releaseReference);return;}
+    state.references[group].push(...pending);renderGenerationReferences(kind);automationMessage(p+'ReferenceMessage','');
+  } catch(error){pending.forEach(releaseReference);automationError(p+'ReferenceMessage','添加参考素材失败',error);}
+  finally {state.adding=false;if(state.pendingReferences===pending)state.pendingReferences=[];}
+}
+function removeGenerationReference(kind,id){
+  const state=generationState[kind]; if (state.submitting) return;
+  for (const group of REFERENCE_ORDER) {const index=state.references[group].findIndex(item=>item.id===id);if(index>=0)releaseReference(state.references[group].splice(index,1)[0]);}
+  renderGenerationReferences(kind);
+}
+function clearGenerationReferences(kind,force=false){
+  const state=generationState[kind]; if(state.submitting&&!force)return;
+  state.referenceVersion++;state.pendingReferences.forEach(releaseReference);state.pendingReferences=[];for(const group of REFERENCE_ORDER){state.references[group].forEach(releaseReference);state.references[group]=[];}
+  renderGenerationReferences(kind);
+}
+function referenceDataURL(item){
+  if (item.dataPromise) return item.dataPromise;
+  item.dataPromise=new Promise((resolve,reject)=>{
+    const reader=new FileReader();item.reader=reader;
+    reader.onload=()=>{item.reader=null;item.data=reader.result;resolve(item.data);};
+    reader.onerror=reader.onabort=()=>{item.reader=null;reject(new Error(t('读取参考文件失败。')));};
+    reader.readAsDataURL(item.file);
+  });
+  return item.dataPromise;
+}
+async function generationPayload(kind){
+  const p=generationPrefix(kind), prompt=$(p+'Prompt').value.trim();
+  if(!prompt)throw new Error(t('请输入提示词'));
+  const geometry=readGenerationGeometry(kind), payload={model:kind==='image'?'muse-image':'muse-video',prompt,aspect_ratio:geometry.aspect_ratio,size:geometry.size,resolution:geometry.resolution,timeout:600};
+  if(kind==='video') {const duration=Number($('vidDur').value);if(!Number.isInteger(duration)||duration<1||duration>30)throw new Error(t('时长必须为 1–30 秒的整数。'));payload.duration=duration;}
+  for(const group of REFERENCE_ORDER)payload[group]=await Promise.all(generationState[kind].references[group].map(referenceDataURL));
+  generationState[kind].geometry=geometry;
+  return payload;
+}
+function renderGenerationButtons(kind){
+  const state=generationState[kind],p=generationPrefix(kind),active=state.submitting||state.uncertain||state.id&&!TASK_TERMINAL.has(state.status);
+  $(p+'Btn').disabled=!!active;$(p+'Btn').textContent=t(state.submitting?'生成中…':kind==='image'?'开始生成图片':'开始生成视频');
+  $(p+'References').disabled=!!active;$(p+'Resume').hidden=!state.uncertain&&(!state.id||TASK_TERMINAL.has(state.status));
+  $(p+'Resume').textContent=t(state.uncertain?'确认提交状态后解除锁定':'刷新已有任务');
+}
+function finishGeneration(kind,result){
+  const state=generationState[kind],p=generationPrefix(kind);state.status=result.status;state.submitting=false;
+  generationPollers[kind].pause();clearGenerationReferences(kind,true);
+  const box=$(p+'Res');box.className='result show';
+  if(!['completed','succeeded'].includes(result.status)) {
+    box.innerHTML='<b style="color:var(--bad)">'+esc(t('✗ 生成失败'))+'</b><pre class="out" data-no-i18n>'+esc(safeAutomationText(typeof result.error==='object'?diagnosticJSON(result.error):result.error||result.status))+'</pre>';
   } else {
-    _selectedMedia.add(name);
+    const item=result.data?.[0]||result.result||{}, url=safeTaskResultURL(item.url||result.url),media=url?{url,kind,exists:true,bytes:item.bytes}:null;
+    box.innerHTML='<b style="color:var(--ok)">'+esc(t('✓ 生成成功'))+'</b><div class="mono" data-no-i18n>'+esc(state.id)+'</div>'+taskMediaHTML(media,true)+'<p class="hint">'+esc(t('比例与尺寸是提示词目标，上游不保证实际像素。'))+'</p>';
   }
-  updateMediaSelectionUI();
+  renderGenerationButtons(kind);
+  if(activeAutomationTab('tasks'))void loadTasks();
 }
-
-function toggleSelectAllMedia(){
-  if (!_allMedia.length) return;
-  if (_selectedMedia.size === _allMedia.length) {
-    _selectedMedia.clear();
-  } else {
-    _selectedMedia = new Set(_allMedia.map(m => m.name));
-  }
-  updateMediaSelectionUI();
+async function pollGeneration(kind,signal){
+  const state=generationState[kind],p=generationPrefix(kind);
+  if(!state.id)return;
+  if(Date.now()-state.started>=15*60*1000){generationPollers[kind].pause();generationPollStopped(kind);$(p+'Res').textContent=t('等待超过 15 分钟，请在任务记录查看结果，勿重复提交');return;}
+  const endpoint=kind==='image'?'/v1/images/tasks/':'/v1/videos/';
+  try {
+    const result=await automationApi(endpoint+encodeURIComponent(state.id),{signal});if(signal?.aborted)return;
+    state.status=String(result.status||'unknown');
+    if(TASK_TERMINAL.has(state.status)){finishGeneration(kind,result);return;}
+    $(p+'Res').textContent=t('任务')+' '+state.id+' · '+state.status+' · '+t('已等待')+' '+Math.floor((Date.now()-state.started)/1000)+'s';
+  } catch(error){if(!signal?.aborted)$(p+'Res').textContent=t('状态查询暂时失败，请在任务记录查看，勿重复提交')+' · '+safeAutomationText(error.message);throw error;}
 }
-
-async function delSingleMedia(name){
-  if (!confirm(`确定要删除媒体文件「${name}」？此操作无法撤销。`)) return;
-  try{
-    const r = await api('/admin/media/delete', {
-      method: 'POST',
-      body: JSON.stringify({ names: [name] })
-    });
-    if (r.removed > 0) {
-      toast('删除成功', 'ok');
-      _selectedMedia.delete(name);
-      loadMedia();
-    } else {
-      toast('文件不存在或已被删除', 'warn');
-      loadMedia();
-    }
-  }catch(e){
-    toast('删除失败：' + e.message, 'bad');
-  }
+function generationPollStopped(kind){
+  const state=generationState[kind],p=generationPrefix(kind);state.paused=true;state.submitting=false;
+  $(p+'Res').textContent=t('自动刷新已停止，请手动刷新状态。')+' '+t('请在任务记录确认结果，勿重复提交。');renderGenerationButtons(kind);
 }
-
-async function delSelectedMedia(){
-  const count = _selectedMedia.size;
-  if (!count) return toast('请先选择要删除的媒体文件', 'warn');
-  if (!confirm(`确定要永久删除选中的 ${count} 个媒体文件？此操作无法撤销。`)) return;
-
-  const names = Array.from(_selectedMedia);
-  const btn = $('btnDelSelectedMedia');
-  if (btn) { btn.disabled = true; btn.textContent = '删除中…'; }
-
-  try{
-    const r = await api('/admin/media/delete', {
-      method: 'POST',
-      body: JSON.stringify({ names })
-    });
-    toast(`已成功删除 ${r.removed || 0} 个文件`, 'ok');
-    _selectedMedia.clear();
-    loadMedia();
-  }catch(e){
-    toast('批量删除失败：' + e.message, 'bad');
-  }finally{
-    if (btn) btn.disabled = false;
+const generationPollers={};
+for(const kind of ['image','video'])generationPollers[kind]=boundedPoller(()=>activeAutomationTab('play'),()=>{const s=generationState[kind];return !!s.id&&!TASK_TERMINAL.has(s.status)&&!s.paused;},signal=>pollGeneration(kind,signal),()=>generationPollStopped(kind));
+async function startGeneration(kind){
+  const state=generationState[kind],p=generationPrefix(kind);
+  if(state.submitting||state.adding||state.uncertain||state.id&&!TASK_TERMINAL.has(state.status))return;
+  state.submitting=true;renderGenerationButtons(kind);const box=$(p+'Res');box.className='result show';box.textContent=t('正在准备参考素材…');
+  let posted=false;
+  try {
+    const payload=await generationPayload(kind);state.id=null;state.status=null;state.paused=false;state.started=Date.now();
+    box.textContent=t('正在提交生成任务，请勿重复点击…');posted=true;
+    const result=await automationApi(kind==='image'?'/v1/images/tasks':'/v1/videos',{method:'POST',body:JSON.stringify(payload)});
+    if(typeof result.id!=='string'||!result.id)throw new Error(t('任务响应缺少 ID，请先到任务记录确认。'));
+    state.id=result.id;state.status=String(result.status||'queued');state.submitting=false;
+    if(TASK_TERMINAL.has(state.status))finishGeneration(kind,result);
+    else {box.textContent=t('任务')+' '+state.id+' · '+state.status;renderGenerationButtons(kind);generationPollers[kind].reset();generationPollers[kind].schedule();}
+  } catch(error){
+    state.submitting=false;if(posted){state.uncertain=true;clearGenerationReferences(kind,true);}
+    box.innerHTML='<b style="color:var(--bad)">'+esc(t('✗ 创建任务失败'))+'</b><pre class="out" data-no-i18n>'+esc(safeAutomationText(error.message))+'</pre>'+(posted?'<p>'+esc(t('提交状态未知，请在任务记录确认结果，勿重复提交。'))+'</p>':'');renderGenerationButtons(kind);
   }
 }
-
-async function loadMedia(){
-  try{
-    const d = await api('/admin/media');
-    const ms = d.media || [];
-    _allMedia = ms;
-    const validNames = new Set(ms.map(m => m.name));
-    for (const name of Array.from(_selectedMedia)) {
-      if (!validNames.has(name)) _selectedMedia.delete(name);
-    }
-    $('mediaCount').textContent = ms.length;
-    $('sMedia').textContent = ms.length;
-    if (!ms.length){
-      $('mediaGrid').innerHTML = '<div class="empty">还没有生成任何媒体文件</div>';
-      updateMediaSelectionUI();
-      return;
-    }
-    $('mediaGrid').innerHTML = ms.map(m => {
-      const isSel = _selectedMedia.has(m.name);
-      return `
-      <div class="tile ${isSel ? 'selected' : ''}" data-name="${esc(m.name)}">
-        <label class="check-tag" title="勾选以批量操作" onclick="event.stopPropagation()">
-          <input type="checkbox" class="tile-check" ${isSel ? 'checked' : ''} onchange="toggleMediaSelect('${esc(m.name)}')">
-        </label>
-        <div class="thumb">${m.kind === 'video'
-          ? `<video src="${esc(m.url)}" muted playsinline preload="metadata"></video>`
-          : `<img src="${esc(m.url)}" loading="lazy" alt="">`}</div>
-        <div class="meta">
-          <div class="nm" title="${esc(m.name)}">${esc(m.name)}</div>
-          <div style="margin-top:3px">${fmtBytes(m.bytes)} · ${fmtTime(m.mtime)}</div>
-          <div class="ac">
-            <a class="badge info" href="${esc(m.url)}" target="_blank">打开</a>
-            <a class="badge mute" href="${esc(m.url)}" download>下载</a>
-            <a class="badge bad" href="javascript:void(0)" onclick="delSingleMedia('${esc(m.name)}')">删除</a>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-    updateMediaSelectionUI();
-  }catch(e){ $('mediaGrid').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+async function resumeGeneration(kind){
+  const state=generationState[kind];
+  if(state.uncertain){if(!confirm(t('请先确认任务记录没有本次任务。解除锁定可能造成重复计费，仍要继续吗？')))return;state.uncertain=false;renderGenerationButtons(kind);return;}
+  if(!state.id||TASK_TERMINAL.has(state.status))return;
+  state.paused=false;state.started=Date.now();generationPollers[kind].reset();await generationPollers[kind].run();
 }
-
-/* ================= 在线测试 ================= */
-async function runImage(){
-  const btn = $('imgBtn'), box = $('imgRes');
-  const prompt = $('imgPrompt').value.trim();
-  if (!prompt) return toast('请输入提示词', 'warn');
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>生成中…';
-  box.className = 'result show';
-  box.innerHTML = '<span class="spin"></span>正在提交图片任务，生成期间会持续查询状态…';
-  const t0 = Date.now();
-  try{
-    let r = await api('/v1/images/tasks', {method:'POST',
-      body: JSON.stringify({prompt, size: $('imgSize').value, timeout:600})});
-    const taskId = r.id;
-    const deadline = Date.now() + 15 * 60 * 1000;
-    let failures = 0;
-    while (r.status !== 'completed') {
-      if (Date.now() >= deadline) throw new Error('等待超过 15 分钟，请在任务记录查看结果，勿重复提交');
-      if (r.status === 'failed') throw new Error(r.error || '图片生成失败');
-      box.textContent = `任务 ${taskId} · ${r.status} · 已等待 ${Math.floor((Date.now()-t0)/1000)} 秒`;
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      try {
-        r = await api('/v1/images/tasks/' + encodeURIComponent(taskId));
-        failures = 0;
-      } catch (e) {
-        if (++failures >= 6) throw new Error('状态查询暂时失败，请在任务记录查看，勿重复提交');
-      }
-    }
-    const it = r.data[0];
-    box.innerHTML = `<b style="color:var(--ok)">✓ 生成成功</b>
-      <span class="mono" style="color:var(--muted);margin-left:10px">${((Date.now()-t0)/1000).toFixed(1)}s · ${fmtBytes(it.bytes)}</span>
-      <img src="${esc(it.url)}" alt="">
-      <pre class="out">${esc(JSON.stringify(r, null, 2))}</pre>`;
-    loadMedia();
-  }catch(e){
-    box.innerHTML = `<b style="color:var(--bad)">✗ 生成失败</b><pre class="out">${esc(e.message)}</pre>`;
-  }finally{ btn.disabled = false; btn.textContent = '开始生成图片'; }
-}
-
-async function runVideo(){
-  const btn = $('vidBtn'), box = $('vidRes');
-  const prompt = $('vidPrompt').value.trim();
-  if (!prompt) return toast('请输入提示词', 'warn');
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>生成中…';
-  box.className = 'result show';
-  box.innerHTML = '<span class="spin"></span>正在创建视频任务…';
-  const t0 = Date.now();
-  try{
-    const t = await api('/v1/videos', {method:'POST', body: JSON.stringify({
-      prompt, duration: parseInt($('vidDur').value) || 5, size: $('vidSize').value})});
-    // 轮询必须自带兜底：服务重启/任务被删会返回 404，500 也可能出现。
-    // 以前 tick() 是递归调用的未捕获 Promise，出错后按钮和转圈会永久卡在“生成中”。
-    const tick = async () => {
-      const el = ((Date.now()-t0)/1000).toFixed(0);
-      let s;
-      try{
-        s = await api('/v1/videos/' + t.id);
-      }catch(err){
-        box.innerHTML = `<b style="color:var(--bad)">✗ 轮询失败</b><pre class="out">${esc(err && err.message || String(err))}</pre>`;
-        btn.disabled = false; btn.textContent = '开始生成视频';
-        return;
-      }
-      if (s.status === 'succeeded' || s.status === 'completed'){
-        const vurl = (s.result && s.result.url) || s.url || '';
-        const vbytes = (s.result && s.result.bytes) || 0;
-        box.innerHTML = `<b style="color:var(--ok)">✓ 生成成功</b>
-          <span class="mono" style="color:var(--muted);margin-left:10px">${el}s · ${fmtBytes(vbytes)}</span>
-          <video src="${esc(vurl)}" controls playsinline></video>
-          <pre class="out">${esc(JSON.stringify(s, null, 2))}</pre>`;
-        btn.disabled = false; btn.textContent = '开始生成视频';
-        loadMedia(); loadTasks();
-      }else if (s.status === 'failed'){
-        box.innerHTML = `<b style="color:var(--bad)">✗ 生成失败</b><pre class="out">${esc(s.error||'')}</pre>`;
-        btn.disabled = false; btn.textContent = '开始生成视频';
-      }else{
-        box.innerHTML = `<span class="spin"></span>任务 ${esc(s.status)} · 已等待 ${el}s（视频通常 60–120 秒）…`;
-        if (Date.now()-t0 > 15*60*1000){
-          box.innerHTML = `<b style="color:var(--bad)">✗ 轮询超时</b><pre class="out">任务 ${esc(t.id)} 超过 15 分钟未完成，已停止轮询，可到任务记录查看。</pre>`;
-          btn.disabled = false; btn.textContent = '开始生成视频';
-          return;
-        }
-        setTimeout(tick, 4000);
-      }
-    };
-    tick();
-  }catch(e){
-    box.innerHTML = `<b style="color:var(--bad)">✗ 创建任务失败</b><pre class="out">${esc(e.message)}</pre>`;
-    btn.disabled = false; btn.textContent = '开始生成视频';
-  }
+async function runImage(){await startGeneration('image');}
+async function runVideo(){await startGeneration('video');}
+for(const kind of ['image','video']){
+  const p=generationPrefix(kind);syncGenerationGeometry(kind);
+  $(p+'ReferenceList').addEventListener('click',event=>{const button=event.target.closest('button[data-ref-id]');if(button)removeGenerationReference(kind,button.dataset.refId);});
 }
 
 /* ================= 总览刷新 ================= */

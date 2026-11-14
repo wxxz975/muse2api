@@ -1,19 +1,19 @@
 {
-  "version": "1.6.12",
+  "version": "1.6.13",
   "updated_at": "2026-11-14",
   "repo": "https://github.com/wxxz975/muse2api",
   "highlights": [
-    "账号卡片显示剩余额度，从100%绿色至0%红色渐变，重置时间保留上游原文。",
-    "新增每日超限清理设置：媒体与诊断日志分别设上限/目标，按最老文件优先，默认关闭，重启不重复执行当日检查。",
-    "统一账号登录入口，批量验证码登录优先，手动Cookie与扩展工具折叠保留为高级兼容方式。",
-    "移除首页热升级宣传和后台静默升级，只保留本仓库正式Release的手动只读版本检查。",
-    "扩展仍为1.0.2、油猴脚本1.1.2，已有插件无需重装；旧版仍需手动在每个浏览器个人资料中升级。"
+    "接口测试支持比例、1K/2K及常用/自定义分辨率目标，多张参考图、音频及视频素材，图生图共用同一有序素材接口；实际像素仍以上游成品为准。",
+    "账号卡片精简为额度、状态和必要操作，全部刷新统一检查额度/会话/实际Cookie有效期，临期会话自动提前维护，保留失败和忙碌结果。",
+    "请求与日志明确记录映射账号、标签和尝试序号，生成准备失败和换号重试也保留可追溯信息。",
+    "移除媒体库页签，任务详情统一在线预览图片/视频/音频并显示生成参数、账号及安全错误；已清理媒体明确提示，历史无请求文件索引不伪造账号。",
+    "扩展仍为1.0.2、油猴脚本1.1.2，当前无需重装；旧版仍需手动在每个浏览器个人资料升级。"
   ],
   "highlights_en": [
-    "Quota cards show remaining balance, gradually colored from green at 100% to red at 0%, retaining upstream reset text.",
-    "Optional daily FIFO retention checks media and diagnostics separately, only deleting over their configured limits; disabled by default and claimed once per local day across restarts.",
-    "Account login combines batch OTP login with collapsed advanced Cookie and extension import tools.",
-    "Removed the homepage upgrade/promotional box and all silent code updates; only explicit read-only release checks against this maintained fork remain.",
-    "Extension remains 1.0.2 and userscript 1.1.2; older extensions still require a manual upgrade in every browser profile."
+    "The test studio supports aspect ratios, 1K/2K and common/custom pixel targets, ordered multi-image/audio/video references and image-to-image; actual media dimensions depend on upstream results.",
+    "Compact account cards use unified refresh for quota/session/cookie metadata, with proactive near-expiry checks and truthful busy/failure states.",
+    "Requests and diagnostics retain assigned account IDs/labels and retry attempts, including preparation failures before generation starts.",
+    "Removed the media-library tab; task details preview images/video/audio with request targets, account and safe errors. Missing media is explicit; legacy files are indexed without inventing request identities.",
+    "Extension remains 1.0.2 and userscript 1.1.2; older versions still need a manual upgrade in every browser profile."
   ]
 }
