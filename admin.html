@@ -3022,7 +3022,7 @@ async function delAcc(id, label){
 }
 
 /* ================= 任务记录 ================= */
-let tasksHaveWork = false,taskDetailRequest=null,taskDetailGeneration=0;
+let tasksHaveWork = false,lastTaskCount = 0,taskDetailRequest=null,taskDetailGeneration=0;
 let taskDetailId='',taskDetailOpen=false,taskDetailReturn=null,taskDetailHistoryPushed=false;
 const TASK_TERMINAL = new Set(['succeeded','completed','failed','cancelled','canceled','interrupted']);
 function safeTaskResultURL(raw){
@@ -3050,7 +3050,7 @@ async function loadTasks(signal){
   try{
     const d=await automationApi('/admin/tasks?limit=60',{signal});if(signal?.aborted)return;
     const tasks=(Array.isArray(d?.tasks)?d.tasks:[]).slice(0,60);tasksHaveWork=tasks.some(task=>!TASK_TERMINAL.has(task.status));
-    if(!tasksHaveWork)tasksPoller.pause();$('taskCount').textContent=tasks.length;
+    if(!tasksHaveWork)tasksPoller.pause();$('taskCount').textContent=tasks.length;lastTaskCount=tasks.length;
     if(!tasks.length){$('taskBody').innerHTML='<tr><td colspan="8" class="empty">'+esc(t('暂无任务记录'))+'</td></tr>';return;}
     $('taskBody').innerHTML=tasks.map(task=>{
       const cls=['succeeded','completed'].includes(task.status)?'ok':task.status==='failed'?'bad':'info',id=esc(task.id);
@@ -3161,11 +3161,23 @@ async function delTask(id){
   catch(e){ toast('删除失败：' + e.message, 'bad'); }
 }
 async function clearTasks(){
-  if (!confirm('确定清空全部任务记录？（已生成的媒体文件不会被删除）')) return;
-  try{
-    const r = await api('/admin/tasks/clear', {method:'POST', body: JSON.stringify({keep: 0})});
-    toast(`已清空 ${r.removed} 条记录`, 'ok'); loadTasks();
-  }catch(e){ toast('清空失败：' + e.message, 'bad'); }
+  const total = Number(lastTaskCount || 0);
+  const answer = prompt(
+    `将清理 ${total} 条任务记录（已生成的媒体文件仍保留在磁盘，但任务历史无法恢复）。\n\n` +
+    '输入「清空」：删除全部记录；\n输入数字：只保留最近 N 条；\n留空或取消：不执行');
+  if (answer === null) return;
+  const text = String(answer).trim();
+  let keep = 0;
+  if (text !== '清空') {
+    if (!/^\d{1,5}$/.test(text)) { toast(t('未输入「清空」或保留条数，已取消'), 'warn'); return; }
+    keep = Number(text);
+  }
+  try {
+    const body = keep === 0 ? {keep: 0, confirm: 'CLEAR'} : {keep};
+    const r = await api('/admin/tasks/clear', {method:'POST', body: JSON.stringify(body)});
+    toast(`已清理 ${r.removed} 条记录，保留 ${r.kept ?? keep} 条`, 'ok');
+    loadTasks();
+  } catch(e){ toast('清空失败：' + e.message, 'bad'); }
 }
 
 /* ================= 在线测试：几何、内存素材与有限异步轮询 ================= */

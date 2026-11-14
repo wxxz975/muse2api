@@ -582,5 +582,28 @@ if (process.argv.includes('--serve')) {
     assert.equal(zh.context.t('已选 3 个'),'已选 3 个');
     assert.ok(html.includes('title="拖拽文件到上传卡片即可加入参考素材"'));
   });
+  await test('destructive task clearing requires an explicit typed confirmation',async()=>{
+    const h=harness();
+    // `clearTasks` lives outside the extracted page sections; load its real source.
+    h.run(script.slice(script.indexOf('async function clearTasks('), script.indexOf('/* ================= 在线测试')));
+    h.requests.length=0;
+    let prompts=[];
+    h.context.prompt=(message)=>{prompts.push(message);return null;};
+    await h.context.clearTasks();
+    assert.equal(h.requests.length,0,'cancel must not call the API');
+    h.context.prompt=()=> 'oops';
+    await h.context.clearTasks();
+    assert.equal(h.requests.length,0,'unknown text must not call the API');
+    h.context.prompt=()=> '清空';
+    h.setRespond(async path=>({removed:5,kept:0}));
+    h.requests.length=0;
+    const clearReq=()=>h.requests.filter(r=>String(r.path).includes('/admin/tasks/clear')).at(-1);
+    await h.context.clearTasks();
+    assert.deepEqual(JSON.parse(clearReq().options.body),{keep:0,confirm:'CLEAR'});
+    h.context.prompt=()=> '20';
+    await h.context.clearTasks();
+    assert.deepEqual(JSON.parse(clearReq().options.body),{keep:20});
+    assert.ok(prompts.length>=1 && /清空/.test(prompts[0]));
+  });
   console.log('ALL PASS ('+passed+' admin automation checks)');
 }

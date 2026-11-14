@@ -2480,7 +2480,15 @@ def del_task(tid: str, _=Depends(auth)):
 
 @app.post("/admin/tasks/clear")
 def clear_tasks(payload: dict = Body(default={}), _=Depends(auth)):
-    return {"removed": store.clear_tasks(int(payload.get("keep") or 0))}
+    """Destructive: every record is gone for good; media files are left on disk."""
+    keep = int(payload.get("keep") or 0)
+    if keep < 0 or keep > 100000:
+        raise HTTPException(400, "keep 必须是 0~100000 的整数")
+    if keep == 0 and payload.get("confirm") != "CLEAR":
+        raise HTTPException(400, "清空全部任务需要显式 confirm=CLEAR；建议改用 keep 只清理旧记录")
+    removed = store.clear_tasks(keep)
+    journal.emit("tasks.cleared", level="warning", stage="tasks", kept=keep, removed=removed)
+    return {"removed": removed, "kept": keep}
 
 
 @app.get("/admin/media")
