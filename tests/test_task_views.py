@@ -14,8 +14,8 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import task_views
-from task_views import project_task
+from muse2api import task_views
+from muse2api.task_views import project_task
 
 
 IMAGE = "a" * 32 + ".png"

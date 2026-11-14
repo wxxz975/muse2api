@@ -11,11 +11,11 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-spec = importlib.util.spec_from_file_location("muse_engine_candidate", ROOT / "engine.py")
+spec = importlib.util.spec_from_file_location("muse_engine_candidate", ROOT / "muse2api" / "engine.py")
 engine_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(engine_module)
 
-tree = ast.parse((ROOT / "engine.py").read_text(encoding="utf-8"))
+tree = ast.parse((ROOT / "muse2api" / "engine.py").read_text(encoding="utf-8"))
 method = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_wait_ws_ready")
 expression = next(n.args[0].value for n in ast.walk(method)
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "js")

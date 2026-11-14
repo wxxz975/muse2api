@@ -16,9 +16,9 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from account_identity import (AccountIdentityConflict, identity_from_session,
+from muse2api.account_identity import (AccountIdentityConflict, identity_from_session,
                               normalize_identity, verified_email_identity)
-from store import Store, VML_TTL
+from muse2api.store import Store, VML_TTL
 
 
 def user(uid="user-fixture", email=None):
@@ -78,14 +78,14 @@ class StoreIdentityTests(unittest.TestCase):
                 "ok": None, "note": "", "synced_at": None, **kw}
 
     def test_reimport_matches_accounts_not_tasks_and_preserves_state_and_object(self):
-        with patch("store.time.time", return_value=1000):
+        with patch("muse2api.store.time.time", return_value=1000):
             account = self.store.add_account({"hatch_sess": "same", "hatch_vml": "vml"}, "old",
                                              {"hatch_vml": 9999})
         self.store.update_account(account["id"], enabled=False, use_count=7, last_used=123,
                                   proxy={"server": "http://proxy.test:80", "password": "fixture"})
         task = self.store.create_task("account", "not-an-account")
         self.store.update_task(task["id"], cookies={"hatch_sess": "same"})
-        with patch("store.time.time", return_value=2000):
+        with patch("muse2api.store.time.time", return_value=2000):
             found = self.store.add_account({"hatch_sess": "same"}, "new")
         self.assertIs(found, account)
         self.assertEqual(len(self.store.accounts), 1)
@@ -113,11 +113,11 @@ class StoreIdentityTests(unittest.TestCase):
         self.assertEqual(len(self.store.accounts), 4)
 
     def test_verified_user_merges_cross_sessions_without_reenabling_or_counting_use(self):
-        with patch("store.time.time", return_value=1000):
+        with patch("muse2api.store.time.time", return_value=1000):
             original = self.store.add_account({"hatch_sess": "old", "hatch_vml": "old-vml"},
                                               cookies_exp={"hatch_vml": 2000}, identity=user())
         self.store.update_account(original["id"], enabled=False, use_count=4, last_used=1200)
-        with patch("store.time.time", return_value=3000):
+        with patch("muse2api.store.time.time", return_value=3000):
             imported = self.store.add_account({"hatch_sess": "new"}, identity=user())
         self.assertIs(imported, original)
         self.assertFalse(imported["enabled"])
@@ -198,7 +198,7 @@ class StoreIdentityTests(unittest.TestCase):
         self.seed([a, b])
         store = Store(self.cfg)
         self.assertEqual(store.accounts[0]["cookies"]["hatch_sess"], "new-session")
-        with patch("store.time.time", return_value=5000):
+        with patch("muse2api.store.time.time", return_value=5000):
             store.touch_keepalive("new", True)
         self.assertEqual(store.accounts[0]["expires_at"], 2000 + VML_TTL)
 
@@ -256,7 +256,7 @@ class StoreIdentityTests(unittest.TestCase):
     def test_manual_session_replacement_clears_identity_but_authenticated_rotation_keeps_it(self):
         a = self.store.add_account({"hatch_sess": "a", "hatch_vml": "same-vml"},
                                    cookies_exp={"hatch_vml": 9999999}, identity=user())
-        with patch("store.time.time", return_value=1000):
+        with patch("muse2api.store.time.time", return_value=1000):
             self.store.update_account(a["id"], cookies={"hatch_sess": "rotated", "hatch_vml": "same-vml"},
                                       cookies_exp={}, verified_session=True)
         self.assertEqual(a["identity"], user())
@@ -269,12 +269,12 @@ class StoreIdentityTests(unittest.TestCase):
 
     def test_session_only_measured_expiry_survives_verified_rotation_without_extension(self):
         measured_expiry = 1900012345
-        with patch("store.time.time", return_value=1900000000):
+        with patch("muse2api.store.time.time", return_value=1900000000):
             a = self.store.add_account({"hatch_sess": "session-only"},
                                        cookies_exp={"hatch_vml": measured_expiry}, identity=user())
         self.assertEqual(a["expires_at"], measured_expiry)
         self.assertNotIn("hatch_vml", a["cookies"])
-        with patch("store.time.time", return_value=1900003600):
+        with patch("muse2api.store.time.time", return_value=1900003600):
             self.store.add_account({"hatch_sess": "session-only"}, cookies_exp={})
             self.store.update_account(a["id"], cookies={"hatch_sess": "rotated"},
                                       cookies_exp={}, verified_session=True)
@@ -305,9 +305,9 @@ class StoreIdentityTests(unittest.TestCase):
         self.assertEqual(Path(self.cfg.accounts_file).read_bytes(), before)
 
     def test_keepalive_reimport_and_empty_expiry_never_extend_estimated_lifetime(self):
-        with patch("store.time.time", return_value=1000):
+        with patch("muse2api.store.time.time", return_value=1000):
             a = self.store.add_account({"hatch_sess": "a"})
-        with patch("store.time.time", return_value=2000):
+        with patch("muse2api.store.time.time", return_value=2000):
             self.store.add_account({"hatch_sess": "a"}, cookies_exp={})
             self.store.update_account(a["id"], cookies_exp={})
             self.store.update_account(a["id"], cookies={"hatch_sess": "a"}, expiry_anchor=2000)
@@ -339,7 +339,7 @@ class StoreIdentityTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.store.bind_identity(b["id"], user())
         self.assertEqual(self.store.accounts, before)
-        with patch("store._write", side_effect=OSError("fixture")):
+        with patch("muse2api.store._write", side_effect=OSError("fixture")):
             with self.assertRaises(OSError):
                 self.store.add_account({"hatch_sess": "a"}, "must-not-change")
         self.assertEqual(a["label"], before[0]["label"])

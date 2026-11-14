@@ -12,8 +12,8 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
 
 import app
-from config import Config
-from store import Store
+from muse2api.config import Config
+from muse2api.store import Store
 
 
 def test_concurrency_lock():
@@ -118,7 +118,7 @@ def test_parallel_generation_simulation():
         return {"filename": f"{account_id}.png", "size": 1234, "kind": expect}
 
     try:
-        with patch("store._write", lambda *a, **k: None), \
+        with patch("muse2api.store._write", lambda *a, **k: None), \
              patch.object(app.store, "mark", lambda *a, **k: None), \
              patch.object(app.engine, "start", return_value=None), \
              patch.object(app.engine, "generate", side_effect=fake_generate), \

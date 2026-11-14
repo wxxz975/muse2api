@@ -68,7 +68,7 @@ def make_engine(module):
 
 def main():
     sys.path.insert(0, str(ROOT))
-    spec = importlib.util.spec_from_file_location("upload_recovery_target", ROOT / "engine.py")
+    spec = importlib.util.spec_from_file_location("upload_recovery_target", ROOT / "muse2api" / "engine.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)

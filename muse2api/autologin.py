@@ -48,7 +48,15 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Callable
 
-from proxy import HTTPProxyRelay, normalize_server, split_proxy_url
+# 允许以文件方式单独加载本模块（测试/工具会 spec_from_file_location 加载）。
+try:
+    from .proxy import HTTPProxyRelay, normalize_server, split_proxy_url
+    from .account_identity import identity_from_session, verified_email_identity
+except ImportError:  # pragma: no cover - standalone file loading
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from proxy import HTTPProxyRelay, normalize_server, split_proxy_url
+    from account_identity import identity_from_session, verified_email_identity
 
 LOGIN_URL = "https://muse.ai/"
 LOGIN_INPUT = ('input[aria-label="Mobile number or email"], '
@@ -756,7 +764,10 @@ class AutoLoginService:
         if data.get("status") != "assigned":
             raise _FlowError("session_unassigned")
         self._state(page)
-        from account_identity import identity_from_session, verified_email_identity
+        try:
+            from .account_identity import identity_from_session, verified_email_identity
+        except ImportError:  # pragma: no cover - standalone file loading
+            from account_identity import identity_from_session, verified_email_identity
         identity = identity_from_session(data, verified=True)
         if _EMAIL.fullmatch(credentials.account):
             verified_email = verified_email_identity(credentials.account, source="otp")

@@ -5,7 +5,7 @@ import re
 import unicodedata
 import unittest
 
-SOURCE = Path(__file__).resolve().parents[1] / "engine.py"
+SOURCE = Path(__file__).resolve().parents[1] / "muse2api" / "engine.py"
 SOURCE_BYTES = SOURCE.read_bytes()
 tree = ast.parse(SOURCE_BYTES, filename=str(SOURCE))
 engine = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "MuseEngine")

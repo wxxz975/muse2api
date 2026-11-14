@@ -49,26 +49,26 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                Response, StreamingResponse)
 from pydantic import model_validator, BaseModel, Field, SecretStr, field_validator
 
-from config import CFG
-from engine import (ESSENTIAL_COOKIES, MAX_REFERENCE_IMAGE_BYTES,
+from muse2api.config import CFG
+from muse2api.engine import (ESSENTIAL_COOKIES, MAX_REFERENCE_IMAGE_BYTES,
                     MAX_REFERENCE_IMAGES, MAX_REFERENCE_TOTAL_BYTES,
                     REFERENCE_MIME_EXT, MuseAuthError, MuseEngine, MuseGenerationError,
                     MuseModelRefusalError, MuseRegionRestrictedError,
                     RefImageSafetyError, reference_kind)
-from engine import MuseProxyError
-from store import Store, account_expiry, min_expiry
-from proxy import normalize_server, request_proxy_context, split_proxy_url
-from maintenance import MaintenanceSettings, MaintenanceSettingsStore, operation_due
-from diagnostics import Journal, redact, safe_message
-from account_identity import AccountIdentityConflict, identity_from_session, identity_keys
-from autologin import (AutoLoginService, LoginCapacityError, LoginConflictError,
+from muse2api.engine import MuseProxyError
+from muse2api.store import Store, account_expiry, min_expiry
+from muse2api.proxy import normalize_server, request_proxy_context, split_proxy_url
+from muse2api.maintenance import MaintenanceSettings, MaintenanceSettingsStore, operation_due
+from muse2api.diagnostics import Journal, redact, safe_message
+from muse2api.account_identity import AccountIdentityConflict, identity_from_session, identity_keys
+from muse2api.autologin import (AutoLoginService, LoginCapacityError, LoginConflictError,
                        LoginNotFoundError)
-from releases import ReleaseChecker
-from cleanup import CleanupManager, CleanupSettings
-from generation_specs import validate_geometry, geometry_instruction
-from quota_dates import reset_metadata
-from task_views import project_task
-from media_history import index_legacy_media
+from muse2api.releases import ReleaseChecker
+from muse2api.cleanup import CleanupManager, CleanupSettings
+from muse2api.generation_specs import validate_geometry, geometry_instruction
+from muse2api.quota_dates import reset_metadata
+from muse2api.task_views import project_task
+from muse2api.media_history import index_legacy_media
 
 import sys
 log = logging.getLogger("muse2api")

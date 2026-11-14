@@ -24,7 +24,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import autologin as login
+import muse2api.autologin as login
 
 
 class Clock:
@@ -634,7 +634,7 @@ def test_real_chromium_local_login_dom_http_only_cookies_and_isolation(tmp_path)
     """Real CDP + JS + local HTTP fixture, explicitly NOT a live Muse OTP test."""
     import shutil
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from engine import MuseEngine
+    from muse2api.engine import MuseEngine
 
     chromium = (shutil.which('chromium') or shutil.which('google-chrome') or
                 next((str(p) for p in [Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')]

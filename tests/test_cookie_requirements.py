@@ -25,8 +25,8 @@ def js_constant(path: Path, name: str):
     return tuple(json.loads(match.group(1).replace("'", '"')))
 
 
-engine = python_constant(ROOT / "engine.py", "ESSENTIAL_COOKIES")
-store = python_constant(ROOT / "store.py", "ESSENTIAL_COOKIES")
+engine = python_constant(ROOT / "muse2api" / "engine.py", "ESSENTIAL_COOKIES")
+store = python_constant(ROOT / "muse2api" / "store.py", "ESSENTIAL_COOKIES")
 helper = python_constant(ROOT / "tools/get_muse_cookie.py", "ESSENTIAL")
 extension = js_constant(ROOT / "extension/popup.js", "ESSENTIAL")
 userscript = js_constant(ROOT / "tools/muse2api_cookie_importer.user.js", "ESSENTIAL")

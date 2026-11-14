@@ -17,7 +17,7 @@ parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent
 args = parser.parse_args()
 root = args.root.resolve()
 sys.path.insert(0, str(root))
-spec = importlib.util.spec_from_file_location('composer_send_candidate', root / 'engine.py')
+spec = importlib.util.spec_from_file_location('composer_send_candidate', root / "muse2api" / "engine.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 

@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlsplit
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from cdp import CDP
+from muse2api.cdp import CDP
 parser=argparse.ArgumentParser();parser.add_argument('--html',default=str(ROOT/'admin.html'));parser.add_argument('--screenshots',type=Path);parser.add_argument('--probe-only',action='store_true');args=parser.parse_args()
 html=Path(args.html).read_bytes()
 VERSION=json.loads((ROOT/'version.json').read_text())['version']

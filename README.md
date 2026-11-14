@@ -104,6 +104,38 @@ Upload one product photo and get talking-head sales videos, story-style ad short
 
 ---
 
+## 🗂 项目结构
+
+```text
+muse2api/
+├── app.py                  # 唯一入口：FastAPI 应用与 /v1、/admin 路由（uvicorn app:app）
+├── admin.html              # 管理面板单页（无构建步骤）
+├── version.json            # 版本与更新说明
+├── requirements.txt / Dockerfile / docker-compose.yml
+├── muse2api/               # 支撑模块包（原根目录散落的模块已收拢于此）
+│   ├── config.py           # 配置与环境变量、目录约定
+│   ├── store.py            # 账号池与任务持久化（JSON 原子写）
+│   ├── engine.py           # CDP 浏览器自动化：对话 / 生图 / 生视频 / 额度
+│   ├── cdp.py              # 极简 Chrome DevTools Protocol 客户端
+│   ├── proxy.py            # 账号级 HTTP/SOCKS5 代理与中继
+│   ├── autologin.py        # 网页验证码批量登录（隔离上下文）
+│   ├── account_identity.py # 账号身份与去重规则
+│   ├── diagnostics.py      # 脱敏轮转诊断日志
+│   ├── maintenance.py      # 保活 / 额度维护节奏
+│   ├── cleanup.py          # 每日超限 FIFO 清理
+│   ├── generation_specs.py # 比例 / 分辨率目标换算
+│   ├── quota_dates.py      # 额度重置日期的保守解析
+│   ├── media_history.py    # 历史媒体索引
+│   ├── releases.py         # 只读版本检查
+│   └── task_views.py       # 任务详情安全投影
+├── extension/  tools/  deploy/   # 浏览器扩展、辅助脚本、部署配置
+├── tests/                 # 离线回归（无需真实账号）
+└── data/                  # 运行时数据：账号、任务、媒体、日志（不入库）
+```
+
+包内模块使用包内相对导入；同时保留以文件方式单独加载的兼容分支，
+方便测试与调试脚本直接加载单个模块。
+
 ## 🚀 极速部署
 
 ### 方式一：Docker Compose（推荐，一行命令开箱即用）

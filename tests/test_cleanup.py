@@ -15,9 +15,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import cleanup
-from cleanup import CleanupManager, CleanupSettings
-from diagnostics import Journal
+import muse2api.cleanup as cleanup
+from muse2api.cleanup import CleanupManager, CleanupSettings
+from muse2api.diagnostics import Journal
 
 MIB = 1024 * 1024
 NOW = datetime(2026, 11, 14, 4, tzinfo=ZoneInfo("Asia/Shanghai"))
@@ -518,7 +518,7 @@ def test_unsupported_platform_keeps_settings_usable_and_deletion_fail_closed(tmp
 def test_cleanup_imports_when_fcntl_module_is_unavailable():
     # A fresh interpreter, not a monkeypatch of an already imported module.
     import subprocess
-    code = 'import sys; sys.modules["fcntl"]=None; import cleanup; from diagnostics import Journal; assert cleanup.fcntl is None; assert cleanup.CleanupSettings().enabled is False'
+    code = 'import sys; sys.modules["fcntl"]=None; import muse2api.cleanup as cleanup; from muse2api.diagnostics import Journal; assert cleanup.fcntl is None; assert cleanup.CleanupSettings().enabled is False'
     result = subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1],
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
@@ -528,7 +528,7 @@ def test_cross_process_daily_claim_is_once(tmp_path):
     import subprocess
     value = enabled_manager(tmp_path)
     write_file(value.media_dir / "old.png", 2 * MIB)
-    code = ("import json,sys; from cleanup import CleanupManager; from diagnostics import Journal; "
+    code = ("import json,sys; from muse2api.cleanup import CleanupManager; from muse2api.diagnostics import Journal; "
             "from pathlib import Path; p=Path(sys.argv[1]); "
             'm=CleanupManager(p/"media",p/"cleanup.json",p/"cleanup-state.json",Journal(p/"diagnostics.jsonl")); '
             "print(json.dumps(m.run_daily(float(sys.argv[2]))))")

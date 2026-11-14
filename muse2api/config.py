@@ -5,7 +5,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 
-_DEFAULT_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _load_dotenv():

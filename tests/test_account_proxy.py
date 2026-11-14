@@ -26,10 +26,10 @@ HOME = tempfile.TemporaryDirectory(prefix="muse-proxy-test-")
 os.environ.update(MUSE2API_HOME=HOME.name, MUSE2API_PROFILE_ROOT=HOME.name,
                   MUSE2API_KEY="test-only")
 import app
-from config import Config
-from engine import MuseEngine, MuseGenerationError
-from proxy import HTTPProxyRelay, normalize_server, request_proxies
-from store import Store
+from muse2api.config import Config
+from muse2api.engine import MuseEngine, MuseGenerationError
+from muse2api.proxy import HTTPProxyRelay, normalize_server, request_proxies
+from muse2api.store import Store
 
 
 async def request(method, path, body=None):

@@ -70,7 +70,9 @@ async def check(source, home, public_base):
                       MUSE2API_KEY="test-only", MUSE2API_PUBLIC_BASE=public_base)
     sys.path.insert(0, str(source.parent))
     for name in ("config", "store", "engine", "cdp"):
-        sys.modules.pop(name, None)          # config reads MUSE2API_* at import
+        # config reads MUSE2API_* at import; drop both old flat and packaged names.
+        sys.modules.pop(name, None)
+        sys.modules.pop("muse2api." + name, None)
     spec = importlib.util.spec_from_file_location("admin_base_url_test_target", source)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module

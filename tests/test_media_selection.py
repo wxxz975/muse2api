@@ -3,10 +3,10 @@ import sys, importlib.util, json, tempfile, inspect, socket, shutil, os
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from cdp import CDP
+from muse2api.cdp import CDP
 import requests
 
-source = next((a for a in sys.argv[1:] if not a.startswith('--')), str(ROOT/'engine.py'))
+source = next((a for a in sys.argv[1:] if not a.startswith('--')), str(ROOT/'muse2api'/'engine.py'))
 spec=importlib.util.spec_from_file_location('candidate',source)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 from types import SimpleNamespace

@@ -21,18 +21,18 @@ parser.add_argument("--probe-only", action="store_true")
 args = parser.parse_args()
 root = args.root.resolve()
 sys.path.insert(0, str(root))
-from cdp import CDP
+from muse2api.cdp import CDP
 
 with tempfile.TemporaryDirectory(prefix="muse-upload-check-", dir=Path.home()) as home:
     os.environ.update(MUSE2API_HOME=home, MUSE2API_PROFILE_ROOT=home)
-    spec = importlib.util.spec_from_file_location("reference_engine_fixture", root / "engine.py")
+    spec = importlib.util.spec_from_file_location("reference_engine_fixture", root / "muse2api" / "engine.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     Engine = module.MuseEngine
     if hasattr(Engine, "_ATTACHED_COUNT_JS"):
         count_script = Engine._ATTACHED_COUNT_JS
     else:
-        tree = ast.parse((root / "engine.py").read_text())
+        tree = ast.parse((root / "muse2api" / "engine.py").read_text())
         count_script = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Constant)
                             and isinstance(n.value, str) and "if (!composer) return 0" in n.value)
     with socket.socket() as sock:

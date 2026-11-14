@@ -3,7 +3,7 @@ import socketserver,threading,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import requests
-from proxy import HTTPProxyRelay,request_proxy_context,normalize_server
+from muse2api.proxy import HTTPProxyRelay,request_proxy_context,normalize_server
 
 seen=[]
 class Handler(socketserver.BaseRequestHandler):

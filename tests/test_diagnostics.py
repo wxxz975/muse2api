@@ -16,9 +16,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import diagnostics
-from diagnostics import Journal, redact, safe_message
-import engine as module
+import muse2api.diagnostics as diagnostics
+from muse2api.diagnostics import Journal, redact, safe_message
+import muse2api.engine as module
 
 
 class Clock:

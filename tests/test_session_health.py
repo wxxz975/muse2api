@@ -120,8 +120,8 @@ def check(root, home, observe):
         print('page', body, error_name)
 
     # 验证 store 与 engine 的核心 cookie 定义严格一致，防止双处维护产生漂移
-    import store as store_module
-    import engine as engine_module
+    import muse2api.store as store_module
+    import muse2api.engine as engine_module
     expect(store_module.ESSENTIAL_COOKIES == engine_module.ESSENTIAL_COOKIES, 'store and engine ESSENTIAL_COOKIES must match exactly')
 
     # 验证缺少 hatch_gw 时，账号依然判定 essential_ok 并支持正常入库与预续签

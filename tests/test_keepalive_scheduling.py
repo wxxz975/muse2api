@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("MUSE2API_KEY", "test-only")
 sys.path.insert(0, str(ROOT))
 
-from config import Config
-from store import Store
+from muse2api.config import Config
+from muse2api.store import Store
 import app
 
 

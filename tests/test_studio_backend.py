@@ -15,9 +15,9 @@ sys.path.insert(0,str(ROOT))
 HOME=tempfile.TemporaryDirectory(prefix="muse-studio-integration-")
 os.environ.update(MUSE2API_HOME=HOME.name,MUSE2API_PROFILE_ROOT=HOME.name,MUSE2API_KEY="test-only")
 import app
-from generation_specs import validate_geometry
-from quota_dates import reset_metadata
-from maintenance import operation_due
+from muse2api.generation_specs import validate_geometry
+from muse2api.quota_dates import reset_metadata
+from muse2api.maintenance import operation_due
 
 
 class StudioBackendTests(unittest.TestCase):
@@ -112,10 +112,10 @@ class StudioBackendTests(unittest.TestCase):
         self.assertEqual(task["result"]["w"],1024)
 
     def test_legacy_media_index_is_once_and_does_not_fabricate_original_account(self):
-        from media_history import index_legacy_media
+        from muse2api.media_history import index_legacy_media
         with tempfile.TemporaryDirectory() as home:
-            from config import Config
-            from store import Store
+            from muse2api.config import Config
+            from muse2api.store import Store
             cfg=Config(base_dir=home,profile_root=home);cfg.ensure_dirs();store=Store(cfg)
             media=Path(cfg.media_dir); marker=Path(cfg.data_dir)/".media-history-index-v1.json"
             name="abababababababababababababababab.webp";(media/name).write_bytes(b"legacy")

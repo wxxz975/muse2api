@@ -97,7 +97,7 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--probe":
         print(json.dumps(cases(sys.argv[2]), ensure_ascii=False, sort_keys=True))
         return
-    source = ROOT / "engine.py"
+    source = ROOT / "muse2api" / "engine.py"
     result = cases(source)
     for name, item in result.items():
         if name.startswith(("cn_claim_", "cn_ready_", "cn_short_", "en_claim_", "en_ready_", "verified_report_")):

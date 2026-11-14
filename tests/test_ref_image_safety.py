@@ -50,8 +50,8 @@ def check(home):
     for name in ("MUSE2API_REF_IMAGE_LOCAL_FILES",
                  "MUSE2API_REF_IMAGE_PRIVATE_FETCH"):
         os.environ.pop(name, None)
-    from config import Config
-    import engine as module
+    from muse2api.config import Config
+    import muse2api.engine as module
 
     cfg = Config()
     engine = module.MuseEngine(cfg)
@@ -212,8 +212,8 @@ async def check_endpoints(home, data_url):
                     opener.open.side_effect = redirect("http://private.example/ref")
                     dns = lambda host, *a, **kw: addresses(
                         "8.8.8.8" if host == "public.example" else "127.0.0.1")
-                    with patch("engine.socket.getaddrinfo", side_effect=dns), \
-                            patch("engine.urllib.request.build_opener",
+                    with patch("muse2api.engine.socket.getaddrinfo", side_effect=dns), \
+                            patch("muse2api.engine.urllib.request.build_opener",
                                   return_value=opener):
                         reply = await client.post(endpoint, json=body)
                     assert reply.status_code == 400, (

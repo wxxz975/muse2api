@@ -211,7 +211,10 @@ class Journal:
         self._last_write_error: str | None = None
         self._last_write_at: str | None = None
         # Pin retention to the original directory, not a later symlink target.
-        from cleanup import _DirectoryAnchor
+        try:
+            from .cleanup import _DirectoryAnchor
+        except ImportError:  # pragma: no cover - standalone file loading
+            from cleanup import _DirectoryAnchor
         self._purge_anchor = _DirectoryAnchor(self.path.parent)
 
     @contextmanager
@@ -335,7 +338,10 @@ class Journal:
         tail compaction/truncation; it is never unlinked. Unmanaged logs are not
         counted or touched, including similarly named slots above backup_count.
         """
-        from cleanup import _as_utc, _purge_files
+        try:
+            from .cleanup import _as_utc, _purge_files
+        except ImportError:  # pragma: no cover - standalone file loading
+            from cleanup import _as_utc, _purge_files
         timestamp = _as_utc(now).timestamp()
         names = [self.path.name] + [self.path.name + "." + str(number)
                                     for number in range(1, self.backup_count + 1)]
@@ -401,7 +407,7 @@ class Journal:
 def get_journal(path=None) -> Journal:
     """Get a lazy per-path instance. Supplying cfg.data_dir explicitly is preferred."""
     if path is None:
-        base = os.environ.get("MUSE2API_HOME") or os.path.dirname(os.path.abspath(__file__))
+        base = os.environ.get("MUSE2API_HOME") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         path = os.path.join(base, "data", "diagnostics.jsonl")
     key = os.path.abspath(os.fspath(path))
     with _REGISTRY_LOCK:

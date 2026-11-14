@@ -35,9 +35,19 @@ import time
 import uuid
 import unicodedata
 
-from cdp import CDP, http_json
-from diagnostics import Journal, get_journal
-from proxy import HTTPProxyRelay, request_proxy_context
+# 包内导入；同时兼容以文件方式单独加载（测试/工具会用 spec_from_file_location）。
+try:
+    from .cdp import CDP, http_json
+    from .diagnostics import Journal, get_journal
+    from .proxy import HTTPProxyRelay, request_proxy_context
+    from .account_identity import identity_from_session
+except ImportError:  # pragma: no cover - standalone file loading
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from cdp import CDP, http_json
+    from diagnostics import Journal, get_journal
+    from proxy import HTTPProxyRelay, request_proxy_context
+    from account_identity import identity_from_session
 
 log = logging.getLogger("muse2api")
 
@@ -684,7 +694,10 @@ class MuseEngine:
                             f"经账号代理唤醒或确认 VM 失败 ({type(exc).__name__})；未回退直连") from None
                 except Exception:
                     pass
-            from account_identity import identity_from_session
+            try:
+                from .account_identity import identity_from_session
+            except ImportError:  # pragma: no cover - standalone file loading
+                from account_identity import identity_from_session
             return {
                 "identity": identity_from_session(sj),
                 "ok": sj.get("status") == "assigned",

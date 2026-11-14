@@ -18,11 +18,11 @@ sys.path.insert(0, str(ROOT))
 HOME = tempfile.TemporaryDirectory(prefix="muse-maintenance-tests-")
 os.environ.update(MUSE2API_HOME=HOME.name, MUSE2API_PROFILE_ROOT=HOME.name, MUSE2API_KEY="test-only")
 import app
-from config import Config
-from maintenance import MaintenanceSettings, MaintenanceSettingsStore, operation_due
-from diagnostics import Journal
-from cleanup import CleanupManager
-from store import Store
+from muse2api.config import Config
+from muse2api.maintenance import MaintenanceSettings, MaintenanceSettingsStore, operation_due
+from muse2api.diagnostics import Journal
+from muse2api.cleanup import CleanupManager
+from muse2api.store import Store
 
 
 class MaintenanceTests(unittest.IsolatedAsyncioTestCase):

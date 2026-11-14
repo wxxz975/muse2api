@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.modules['cdp'] = SimpleNamespace(CDP=object, http_json=lambda *args, **kwargs: {})
-engine_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / 'engine.py'
+engine_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / 'muse2api' / 'engine.py'
 spec = importlib.util.spec_from_file_location('candidate_engine', engine_path)
 engine = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(engine)

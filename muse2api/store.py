@@ -10,9 +10,17 @@ import threading
 import time
 import uuid
 
-from account_identity import (AccountIdentityConflict, identities_conflict, identity_keys,
-                              merge_identities, normalize_identity)
-from proxy import public_proxy
+# 包内导入；同时兼容以文件方式单独加载（测试/工具会用 spec_from_file_location）。
+try:
+    from .account_identity import (AccountIdentityConflict, identities_conflict,
+                                   identity_keys, merge_identities, normalize_identity)
+    from .proxy import public_proxy
+except ImportError:  # pragma: no cover - standalone file loading
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from account_identity import (AccountIdentityConflict, identities_conflict,
+                                  identity_keys, merge_identities, normalize_identity)
+    from proxy import public_proxy
 
 _LOCK = threading.RLock()
 _UNSET = object()

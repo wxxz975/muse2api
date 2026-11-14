@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from engine import (MuseEngine, MuseGenerationError, _mp4_duration, _webm_duration)
+from muse2api.engine import (MuseEngine, MuseGenerationError, _mp4_duration, _webm_duration)
 
 def element(tag, payload):
     assert len(payload) < 127
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as home:
     engine.extract_bytes = lambda src, expect, **kwargs: (
         originals[int(src.split("-")[1])] if src.startswith("upload-") else b"generated-result",
         "video/mp4", src)
-    with patch("engine.time.sleep", lambda value: None):
+    with patch("muse2api.engine.time.sleep", lambda value: None):
         result = engine._generate_attached("fixture", "video", float("inf"), None, None,
                                            {hashlib.sha256(x).hexdigest() for x in originals})
     assert Path(result["path"]).read_bytes() == b"generated-result"
@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory() as home:
         raise RuntimeError("synthetic CDP disconnect")
     engine.page = SimpleNamespace(js=disconnect)
     before = set(Path(home).iterdir())
-    with patch("engine.time.sleep", lambda value: None):
+    with patch("muse2api.engine.time.sleep", lambda value: None):
         try:
             engine._attach_images([data_url("image/png", b"fixture")])
         except RuntimeError as exc:
@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory() as home:
             raise AssertionError("expected a CDP exception")
     assert set(Path(home).iterdir()) == before
     engine.page = SimpleNamespace(js=lambda script: 1)
-    with patch("engine.time.sleep", lambda value: None):
+    with patch("muse2api.engine.time.sleep", lambda value: None):
         upload = engine._attach_images([data_url("image/png", b"fixture")])
     assert Path(upload["dir"]).parent == Path(home)
     import shutil
