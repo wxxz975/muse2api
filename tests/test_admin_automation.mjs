@@ -605,5 +605,17 @@ if (process.argv.includes('--serve')) {
     assert.deepEqual(JSON.parse(clearReq().options.body),{keep:20});
     assert.ok(prompts.length>=1 && /清空/.test(prompts[0]));
   });
+  await test('disconnected workspace is never labelled available',()=>{
+    const h=harness();
+    const ok={id:'a1',label:'ok',enabled:true,ok:true,vm_state:'RUNNING',quota:{found:true,weekly_used_pct:10}};
+    const broken={id:'a2',label:'broken',enabled:true,ok:true,vm_state:'DISABLED',quota:{}};
+    const unknown={id:'a3',label:'unknown',enabled:true,ok:true,quota:{}};
+    assert.match(h.context.accountCard(ok),/● 可用/);
+    assert.doesNotMatch(h.context.accountCard(broken),/● 可用/);
+    assert.match(h.context.accountCard(broken),/会话有效 · 工作区未连接/);
+    assert.match(h.context.accountCard(broken),/VM: DISABLED/);
+    assert.match(h.context.accountCard(unknown),/工作区未确认/);
+    assert.doesNotMatch(h.context.accountCard(unknown),/● 可用/);
+  });
   console.log('ALL PASS ('+passed+' admin automation checks)');
 }
