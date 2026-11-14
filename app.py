@@ -54,6 +54,7 @@ from muse2api.engine import (ESSENTIAL_COOKIES, MAX_REFERENCE_IMAGE_BYTES,
                     MAX_REFERENCE_IMAGES, MAX_REFERENCE_TOTAL_BYTES,
                     REFERENCE_MIME_EXT, MuseAuthError, MuseEngine, MuseGenerationError,
                     MuseAccountDisconnectedError, MuseModelRefusalError,
+                    MuseWorkspaceUnavailableError,
                     MuseRegionRestrictedError,
                     RefImageSafetyError, reference_kind)
 from muse2api.engine import MuseProxyError
@@ -385,6 +386,8 @@ def _renew_and_persist(acc_id: str, wake_vm: bool = True, force: bool = False) -
             store.update_account(acc_id, cookies=res["cookies"],
                                  cookies_exp=res.get("cookies_exp"), verified_session=True,
                                  ok=True if res.get("ok") else acc.get("ok"),
+                                 vm_state=res.get("vm_state") or acc.get("vm_state"),
+                                 vm_checked_at=int(now),
                                  synced_at=int(now))
             store.touch_keepalive(acc_id, True, f"会话正常 (VM: {res.get('vm_state') or 'RUNNING'})")
     except MuseAuthError as exc:
@@ -471,6 +474,13 @@ def safe_chat_stream(cookies: dict, prompt: str, expires: dict | None,
                             store.mark(cur_id, True, "")
                             _sync_cookies(cur_id)
                         return
+                    except MuseWorkspaceUnavailableError as exc:
+                        last_exc = exc
+                        if cur_id:
+                            store.mark(cur_id, False, f"工作区未连接: {str(exc)[:120]}")
+                        engine.close_current_page()
+                        if yielded:
+                            break
                     except MuseAccountDisconnectedError as exc:
                         last_exc = exc
                         if cur_id:
@@ -1263,6 +1273,11 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                     refreshed = _renew_and_persist(cur_acc["id"], wake_vm=True, force=(attempt > 0))
                     if refreshed:
                         cur_acc = refreshed
+                    workspace = str(cur_acc.get("vm_state") or "").upper()
+                    if workspace and workspace != "RUNNING":
+                        # 工作区未连接时页面能打开但一发送就断开，先快速失败并换号。
+                        raise MuseWorkspaceUnavailableError(
+                            f"账号工作区未连接（VM: {workspace}），无法生成；请到 muse.ai 重新连接后重试")
                     engine.start()
                     remaining = int(deadline - time.monotonic()) if deadline is not None else timeout
                     if remaining <= 0:
@@ -1293,6 +1308,16 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                     last_exc = exc
                     store.touch_keepalive(cur_acc["id"], None, f"代理异常: {str(exc)[:160]}")
                     engine.close_current_page()
+                except MuseWorkspaceUnavailableError as exc:
+                    # 工作区未连接属于账号级状态，换号而不是反复重试。
+                    journal.error("generation.attempt_failed", exc, stage="generation",
+                                  reason=safe_message(str(exc)))
+                    last_exc = exc
+                    store.mark(cur_acc["id"], False, f"工作区未连接: {str(exc)[:120]}")
+                    try:
+                        engine.close_current_page()
+                    except Exception:
+                        pass
                 except MuseAccountDisconnectedError as exc:
                     # 账号被上游断开：标记异常并换号，不能当作普通生成失败继续复用。
                     journal.error("generation.attempt_failed", exc, stage="generation",

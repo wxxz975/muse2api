@@ -2762,7 +2762,10 @@ function accountProxyText(account){
 }
 function accountCard(account){
   const q=account.quota||{},id=esc(account.id),enabled=!!account.enabled;
-  const status=!enabled?'已禁用':account.ok===true?'● 可用':account.ok===false?'● 异常':'○ 未检测',cls=!enabled?'mute':account.ok===true?'ok':account.ok===false?'bad':'warn';
+  const vm=(typeof account.vm_state==='string'&&account.vm_state.trim())?safeAutomationText(account.vm_state):'';
+  const vmBroken=vm&&vm.toUpperCase()!=='RUNNING';
+  const status=(!enabled?'已禁用':account.ok===true?'● 可用':account.ok===false?'● 异常':'○ 未检测')+(vmBroken?' · VM '+vm:''),
+        cls=!enabled?'mute':(account.ok===false||vmBroken)?'bad':account.ok===true?'ok':'warn';
   const plan=typeof q.plan==='string'&&q.plan.trim()?safeAutomationText(q.plan):t('未知');
   const action=(name,label,danger=false)=>'<button type="button" class="'+(danger?'danger':'ghost')+' mini" data-account-action="'+name+'" data-account-id="'+id+'">'+esc(t(label))+'</button>';
   return '<article class="account-card'+(!enabled?' is-disabled':account.ok===false?' is-error':'')+'" data-account-card="'+id+'">'+

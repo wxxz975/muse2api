@@ -406,7 +406,7 @@ def test_invalid_input_is_bounded_and_does_not_echo_values(raw):
     'http://127.0.0.1/mail?token=secret', 'http://[::1]/', 'http://169.254.169.254/',
     'http://[::ffff:127.0.0.1]/', 'http://localhost/', 'https://a.local/',
     'https://user:secret@example.org/', 'https://example.org:0/',
-    'https://example.org/#secret', 'https://example.org/\nsecret'])
+    'https://example.org/\nsecret'])
 def test_unsafe_url_is_rejected_before_start_without_echo(url):
     h = service()
     try:
@@ -416,6 +416,12 @@ def test_unsafe_url_is_rejected_before_start_without_echo(url):
         assert not h.engine.pages
     finally:
         h.svc.close()
+
+
+def test_mail_url_fragment_is_allowed_but_never_sent():
+    """generator.email 会 302 到带 # 的地址；fragment 不出网，不应判非法。"""
+    source = login.PublicOtpSource('https://example.org/mailbox#inbox')
+    assert source._url == 'https://example.org/mailbox'
 
 
 def answers(*ips):

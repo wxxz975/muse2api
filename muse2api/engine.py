@@ -239,6 +239,14 @@ class MuseModelRefusalError(MuseGenerationError):
     """Muse completed the turn with text instead of the requested media."""
 
 
+class MuseWorkspaceUnavailableError(MuseGenerationError):
+    """The account's Muse workspace/VM is not connected (vm_state != RUNNING).
+
+    Muse then renders "Muse is disconnected" and refuses generation. It is an
+    account-level state: skip/rotate instead of retrying the same account.
+    """
+
+
 class MuseAccountDisconnectedError(MuseGenerationError):
     """Muse itself cut this account off ("Muse is disconnected").
 
