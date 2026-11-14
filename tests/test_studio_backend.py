@@ -130,6 +130,30 @@ class StudioBackendTests(unittest.TestCase):
             self.assertEqual(len(store.tasks),1)
             self.assertEqual(task["status"],"completed")
 
+
+    async def test_quota_is_not_read_for_disconnected_workspace(self):
+        app.store.update_account(self.a["id"], vm_state="DISABLED")
+        with patch.object(app.engine, "quota") as quota, \
+             patch.object(app.engine, "start"), \
+             patch.object(app.engine, "renew_session_http", return_value=self.reply()), \
+             patch.object(app.engine, "close_current_page"):
+            with self.assertRaises(app.MuseGenerationError) as raised:
+                await asyncio.to_thread(app._query_quota_sync, self.a["id"], True)
+        quota.assert_not_called()
+        self.assertIn("工作区未连接", str(raised.exception))
+        saved = app.store.get_account(self.a["id"])
+        self.assertIn("工作区未连接", saved.get("quota_error") or "")
+
+    async def test_background_quota_skips_disconnected_workspace(self):
+        app.store.update_account(self.a["id"], vm_state="DISABLED", keepalive_checked_at=0)
+        def keep(aid, check_quota=False):
+            return {"ok": True, "id": aid}
+        with patch.object(app, "_probe_account_sync", side_effect=keep), \
+             patch.object(app, "_query_quota_sync") as query:
+            result = await app.run_account_maintenance(force=True, refresh_all=True)
+        query.assert_not_called()
+        self.assertTrue(any("工作区未连接" in (item.get("reason") or "")
+                            for item in result["skipped"]))
     def test_global_refresh_overrides_toggles_without_reenabling_disabled_accounts(self):
         app.maintenance_settings.update({"keepalive_enabled":False,"quota_enabled":False,"include_disabled":False})
         calls=[]

@@ -1110,6 +1110,8 @@ function setLang(v){
 }
 /* 整句：中文 → 英文 */
 const I18N_EN = {
+  "会话有效 · 工作区未确认": "Session valid · Workspace unknown",
+  "会话有效 · 工作区未连接": "Session valid · Workspace disconnected",
   "周剩余额度": "Weekly quota remaining",
   "额外剩余额度": "Extra quota remaining",
   "额度读取失败：": "Quota read failed: ",
@@ -2763,9 +2765,15 @@ function accountProxyText(account){
 function accountCard(account){
   const q=account.quota||{},id=esc(account.id),enabled=!!account.enabled;
   const vm=(typeof account.vm_state==='string'&&account.vm_state.trim())?safeAutomationText(account.vm_state):'';
-  const vmBroken=vm&&vm.toUpperCase()!=='RUNNING';
-  const status=(!enabled?'已禁用':account.ok===true?'● 可用':account.ok===false?'● 异常':'○ 未检测')+(vmBroken?' · VM '+vm:''),
-        cls=!enabled?'mute':(account.ok===false||vmBroken)?'bad':account.ok===true?'ok':'warn';
+  const vmBroken=!!vm&&vm.toUpperCase()!=='RUNNING';
+  // /api/session 只证明会话（Cookie）有效；工作区未连接时仍然无法生成，不能显示「可用」。
+  const status=!enabled?'已禁用'
+    :account.ok===false?'● 异常'
+    :account.ok!==true?'○ 未检测'
+    :vmBroken?'● '+t('会话有效 · 工作区未连接')+' (VM: '+vm+')'
+    :vm?'● 可用'
+    :'● '+t('会话有效 · 工作区未确认');
+  const cls=!enabled?'mute':(account.ok===false||vmBroken)?'bad':account.ok===true?'ok':'warn';
   const plan=typeof q.plan==='string'&&q.plan.trim()?safeAutomationText(q.plan):t('未知');
   const action=(name,label,danger=false)=>'<button type="button" class="'+(danger?'danger':'ghost')+' mini" data-account-action="'+name+'" data-account-id="'+id+'">'+esc(t(label))+'</button>';
   return '<article class="account-card'+(!enabled?' is-disabled':account.ok===false?' is-error':'')+'" data-account-card="'+id+'">'+

@@ -2656,6 +2656,14 @@ def _persist_session(aid: str, result: dict, note: str, *, keepalive: bool = Tru
 
 def _quota_in_lease(aid: str, acc: dict) -> dict:
     """The manual button and scheduler share the existing Settings-menu JS."""
+    workspace = str(acc.get("vm_state") or "").upper()
+    if workspace and workspace != "RUNNING":
+        # 工作区未连接时页面只有「Muse is disconnected」，没有设置菜单可读。
+        reason = f"账号工作区未连接（VM: {workspace}），无法读取额度；请先在 muse.ai 重新连接工作区"
+        store.update_account(aid, quota_checked_at=int(time.time()), quota_error=reason)
+        journal.emit("quota.skipped_workspace", level="warning", account_id=aid,
+                     stage="quota", reason=reason)
+        raise MuseGenerationError(reason)
     store.update_account(aid, quota_checked_at=int(time.time()))
     journal.emit("quota.started", account_id=aid, stage="quota")
     try:
@@ -2773,8 +2781,14 @@ async def _run_maintenance(force: bool, with_quota: bool, refresh_all: bool = Fa
                 aid = account["id"]
                 keep_due = (settings.keepalive_enabled or not with_quota or refresh_all) and operation_due(
                     account, "keepalive", settings.keepalive_interval_minutes, now, force)
-                quota_due = with_quota and (settings.quota_enabled or refresh_all) and operation_due(
-                    account, "quota", settings.quota_interval_minutes, now, force)
+                workspace = str(account.get("vm_state") or "").upper()
+                workspace_broken = bool(workspace) and workspace != "RUNNING"
+                quota_due = (with_quota and not workspace_broken
+                             and (settings.quota_enabled or refresh_all) and operation_due(
+                                 account, "quota", settings.quota_interval_minutes, now, force))
+                if with_quota and workspace_broken:
+                    skipped.append({"id": aid, "operation": "quota",
+                                    "reason": f"工作区未连接（VM: {workspace}）"})
                 if not keep_due and not quota_due:
                     skipped.append({"id": aid, "reason": "未到维护周期"})
                     continue
