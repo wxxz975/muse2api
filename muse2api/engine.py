@@ -368,6 +368,8 @@ class MuseEngine:
         self._download_dirs: set[str] = set()
         self.proxy_resolver = None
         self._last_http_renew: dict[str, float] = {}
+        # React hydration / 附件重挂载期间输入框可能短暂缺失，等待而非一次判死。
+        self.composer_timeout: float = 15.0
         self._log = None
         os.makedirs(cfg.profile_dir, exist_ok=True)
 
@@ -1159,6 +1161,38 @@ class MuseEngine:
         "b.click();return 'clicked';})()"
     )
 
+    # 组合框可能在上传附件后由 React 重新挂载，或在页面 hydration 完成前短暂不存在。
+    # 之前只 sleep 0.1s 后查一次，实测会在“附件刚上传完”这一瞬间误判为页面损坏。
+    _COMPOSER_RECT_JS = (
+        "(function(){var t=document.querySelector('textarea');if(!t)return null;"
+        "var r=t.getBoundingClientRect();"
+        "if(!r||r.width<8||r.height<8)return null;"
+        "var s=getComputedStyle(t);"
+        "if(s.visibility==='hidden'||s.display==='none')return null;"
+        "return JSON.stringify({x:Math.round(r.left+r.width/2),"
+        "y:Math.round(r.top+r.height/2)});})()")
+
+    _COMPOSER_STATE_JS = (
+        "(function(){return JSON.stringify({"
+        "url:(location&&location.pathname)||'',ready:document.readyState,"
+        "textarea:!!document.querySelector('textarea'),"
+        "composer:!!document.querySelector('[data-testid=\\\"hatch-composer-placeholder-overlay\\\"]'),"
+        "signin:/log in|sign in|登录/i.test((document.body&&document.body.innerText)||'')});})()")
+
+    def _wait_composer(self, timeout: float = 15.0):
+        """在页面 hydration / 附件重挂载期间等待可用的输入框。"""
+        deadline = time.monotonic() + max(0.5, timeout)
+        while True:
+            try:
+                rect = self.page.js(self._COMPOSER_RECT_JS)
+            except Exception:
+                rect = None
+            if rect:
+                return rect
+            if time.monotonic() >= deadline:
+                return None
+            time.sleep(0.15)
+
     @_diagnostic_stage("send")
     def _send(self, prompt: str):
         # 1. 确保 textarea 滚动到视口中央并获得真实焦点
@@ -1176,15 +1210,20 @@ class MuseEngine:
 
         input_started = time.monotonic()
         self._diagnostic("engine.input.start", stage="input")
-        rect = self.page.js(
-            "(function(){var t=document.querySelector('textarea');if(!t)return null;"
-            "var r=t.getBoundingClientRect();"
-            "return JSON.stringify({x:Math.round(r.left+r.width/2),"
-            "y:Math.round(r.top+r.height/2)});})()")
+        rect = self._wait_composer(self.composer_timeout)
         if not rect:
+            state = {}
+            try:
+                state = json.loads(self.page.js(self._COMPOSER_STATE_JS) or "{}")
+            except Exception:
+                state = {}
             self._diagnostic("engine.input.missing", level="warning", stage="input",
-                             reason="composer_not_found")
-            raise MuseGenerationError("找不到聊天输入框")
+                             reason="composer_not_found", page_ready=state.get("ready"),
+                             has_textarea=state.get("textarea"), has_composer=state.get("composer"),
+                             redirected_to_signin=state.get("signin"))
+            if state.get("signin"):
+                raise MuseAuthError("页面回到了登录页，会话可能已失效，请重新导入 Cookie")
+            raise MuseGenerationError("找不到聊天输入框（页面未在超时内就绪，可能仍在加载或 Muse 页面结构已变化）")
         c = json.loads(rect)
         for t in ("mousePressed", "mouseReleased"):
             self.page.send("Input.dispatchMouseEvent",
