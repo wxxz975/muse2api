@@ -2060,7 +2060,7 @@ def get_media(name: str):
 def admin_status(_=Depends(auth)):
     base = _public_base()
     return {
-        "accounts": store.list_accounts(),
+        "accounts": _public_accounts(),
         "stats": store.stats(),
         "tasks": store.list_tasks(20),
         "media_count": len(os.listdir(CFG.media_dir))
@@ -2078,9 +2078,18 @@ def admin_status(_=Depends(auth)):
 
 
 # ------------------------- 管理：账号池 -------------------------
+def _public_accounts():
+    accounts = store.list_accounts()
+    for account in accounts:
+        quota = account.get("quota")
+        if isinstance(quota, dict) and quota.get("checked_at"):
+            quota.update(reset_metadata(quota.get("weekly_reset"), quota["checked_at"]))
+    return accounts
+
+
 @app.get("/admin/accounts")
 def list_accounts(_=Depends(auth)):
-    return {"accounts": store.list_accounts(), "stats": store.stats()}
+    return {"accounts": _public_accounts(), "stats": store.stats()}
 
 
 @app.post("/admin/accounts")
@@ -2600,7 +2609,16 @@ def _quota_in_lease(aid: str, acc: dict) -> dict:
     journal.emit("quota.started", account_id=aid, stage="quota")
     try:
         engine.start()
-        quota = engine.quota(acc["cookies"], acc.get("cookies_exp"), account_id=aid)
+        try:
+            quota = engine.quota(acc["cookies"], acc.get("cookies_exp"), account_id=aid)
+        except MuseAuthError:
+            raise
+        except MuseGenerationError:
+            # UI hydration/menu races are safe to retry: this only reads quota, never generates media.
+            journal.emit("quota.retry", level="warning", account_id=aid, stage="quota",
+                         reason="retry_once_in_fresh_context")
+            engine.close_current_page()
+            quota = engine.quota(acc["cookies"], acc.get("cookies_exp"), account_id=aid)
         if not quota.get("found"):
             raise MuseGenerationError("额度面板未读到有效数据；旧缓存未覆盖")
         quota["checked_at"] = int(time.time())
@@ -2733,7 +2751,10 @@ async def _run_maintenance(force: bool, with_quota: bool, refresh_all: bool = Fa
                         results.append({"operation": "quota", "id": aid, "ok": False, "error": reason})
             summary = {"checked_at": now, "refreshed_count": len(results), "refreshed": results,
                        "skipped_count": len(skipped), "skipped": skipped}
-            KEEPALIVE_STATE.update(last_result=summary, next_run=int(time.time()) + 30)
+            fields = {"last_run": now, "last_check": summary, "next_run": int(time.time()) + 30}
+            if force or results or any(item.get("busy") for item in skipped):
+                fields["last_result"] = summary
+            KEEPALIVE_STATE.update(**fields)
             return summary
         finally:
             KEEPALIVE_STATE["running"] = False

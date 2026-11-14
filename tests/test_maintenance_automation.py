@@ -89,6 +89,16 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
         events = app.journal.read(account_id=self.a["id"])["items"]
         self.assertTrue(any(x["event"] == "quota.failed" and x["error_type"] for x in events))
 
+    async def test_quota_ui_failure_retries_only_one_read_in_fresh_context(self):
+        with patch.object(app.engine, "renew_session_http", return_value=self.reply()), \
+             patch.object(app.engine, "start"), \
+             patch.object(app.engine, "quota", side_effect=[app.MuseGenerationError("menu hydration"), {"found":True,"weekly_used_pct":10}]) as query, \
+             patch.object(app.engine, "close_current_page"):
+            result = await asyncio.to_thread(app._query_quota_sync, self.a["id"], True)
+        self.assertEqual(result["weekly_used_pct"], 10)
+        self.assertEqual(query.call_count, 2)
+        self.assertTrue(any(x["event"] == "quota.retry" for x in app.journal.read()["items"]))
+
     async def test_busy_is_skip_and_not_false_refresh(self):
         before = copy.deepcopy(self.a)
         app.GEN_LOCK.acquire()
