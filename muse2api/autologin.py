@@ -106,9 +106,11 @@ def _url_parts(url: str):
             raise ValueError
         parsed = urllib.parse.urlsplit(url)
         port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+        # fragment 不参与 HTTP 请求（SPA 邮箱站常用 #路由），不能据此判非法；
+        # URL 凭据、非法 scheme 与控制字符仍然拒绝。
         if (parsed.scheme not in ("http", "https") or not parsed.hostname
                 or parsed.username is not None or parsed.password is not None
-                or parsed.fragment or not 1 <= port <= 65535
+                or not 1 <= port <= 65535
                 or any(c in parsed.hostname for c in "\\@%")):
             raise ValueError
         host = parsed.hostname.encode("idna").decode("ascii")
@@ -201,7 +203,9 @@ class PublicOtpSource:
     def __init__(self, url: str, proxy: dict | None = None, timeout: float = 10,
                  guard: Callable | None = None):
         _url_parts(url)
-        self._url, self._proxy, self.timeout = url, proxy, timeout
+        # Fragment 不参与 HTTP 请求；保留会让部分站点反复跳转。
+        self._url = urllib.parse.urldefrag(url)[0]
+        self._proxy, self.timeout = proxy, timeout
         self.guard = guard or (lambda: None)
         self.jar = http.cookiejar.CookieJar()
         self._relay = None
@@ -233,7 +237,7 @@ class PublicOtpSource:
                         exc.close()
                         raise _FlowError("otp_source_unavailable", "needs_manual") from None
                     exc.close()
-                    target = urllib.parse.urljoin(url, location)
+                    target = urllib.parse.urldefrag(urllib.parse.urljoin(url, location))[0]
                     _url_parts(target)
                     if urllib.parse.urlsplit(url).scheme == "https" and urllib.parse.urlsplit(target).scheme != "https":
                         raise OtpSafetyError("otp_redirect_downgrade")
