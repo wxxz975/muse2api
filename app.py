@@ -53,7 +53,8 @@ from muse2api.config import CFG
 from muse2api.engine import (ESSENTIAL_COOKIES, MAX_REFERENCE_IMAGE_BYTES,
                     MAX_REFERENCE_IMAGES, MAX_REFERENCE_TOTAL_BYTES,
                     REFERENCE_MIME_EXT, MuseAuthError, MuseEngine, MuseGenerationError,
-                    MuseModelRefusalError, MuseRegionRestrictedError,
+                    MuseAccountDisconnectedError, MuseModelRefusalError,
+                    MuseRegionRestrictedError,
                     RefImageSafetyError, reference_kind)
 from muse2api.engine import MuseProxyError
 from muse2api.store import Store, account_expiry, min_expiry
@@ -470,6 +471,13 @@ def safe_chat_stream(cookies: dict, prompt: str, expires: dict | None,
                             store.mark(cur_id, True, "")
                             _sync_cookies(cur_id)
                         return
+                    except MuseAccountDisconnectedError as exc:
+                        last_exc = exc
+                        if cur_id:
+                            store.mark(cur_id, False, f"账号已被 Muse 断开: {str(exc)[:120]}")
+                        engine.close_current_page()
+                        if yielded:
+                            break
                     except MuseAuthError as exc:
                         last_exc = exc
                         if cur_id:
@@ -1285,6 +1293,16 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                     last_exc = exc
                     store.touch_keepalive(cur_acc["id"], None, f"代理异常: {str(exc)[:160]}")
                     engine.close_current_page()
+                except MuseAccountDisconnectedError as exc:
+                    # 账号被上游断开：标记异常并换号，不能当作普通生成失败继续复用。
+                    journal.error("generation.attempt_failed", exc, stage="generation",
+                                  reason=safe_message(str(exc)))
+                    last_exc = exc
+                    store.mark(cur_acc["id"], False, f"账号已被 Muse 断开: {str(exc)[:120]}")
+                    try:
+                        engine.close_current_page()
+                    except Exception:
+                        pass
                 except MuseRegionRestrictedError as exc:
                     journal.error("generation.attempt_failed", exc, stage="generation", reason=safe_message(str(exc)))
                     # 地区限制是账号级限制（线上日志：同一账号反复出现「这个账号

@@ -239,6 +239,14 @@ class MuseModelRefusalError(MuseGenerationError):
     """Muse completed the turn with text instead of the requested media."""
 
 
+class MuseAccountDisconnectedError(MuseGenerationError):
+    """Muse itself cut this account off ("Muse is disconnected").
+
+    Account-scoped and not a content refusal: another healthy account may work,
+    so callers must mark this account unhealthy and rotate rather than retry it.
+    """
+
+
 class MuseRegionRestrictedError(MuseGenerationError):
     """The account's region blocks this capability (e.g. video).
 
@@ -771,9 +779,12 @@ class MuseEngine:
         """等待 muse.ai 页面完成 React hydration 且不再处于 Connecting... 状态。"""
         deadline = time.time() + timeout
         while time.time() < deadline:
+            st = None
             try:
                 st = page.js("""(function(){
                     if (document.readyState !== 'complete') return 'loading';
+                    var body = document.body ? (document.body.innerText || '') : '';
+                    if (/Muse is disconnected|We disconnected Muse|Muse 已断开|已与 Muse 断开/i.test(body)) return 'disconnected';
                     if (!document.querySelector('textarea')) return 'no-ta';
                     var h = document.querySelector('[data-hatch-shell-hydration-state]');
                     if (h && h.getAttribute('data-hatch-shell-hydration-state') !== 'hydrated') return 'hydrating';
@@ -783,10 +794,14 @@ class MuseEngine:
                     if (document.querySelector('textarea').disabled) return 'input-disabled';
                     return 'ready';
                 })()""")
-                if st == "ready":
-                    return True
             except Exception:
-                pass
+                st = None
+            if st == "ready":
+                return True
+            if st == "disconnected":
+                # 账号被上游断开：这是账号级问题，立即失败并让调用方换号/停用。
+                raise MuseAccountDisconnectedError(
+                    "该账号已被 Muse 断开（Muse is disconnected），需要到官网重新连接后再导入 Cookie")
             time.sleep(0.1)
         return False
 
@@ -1177,7 +1192,8 @@ class MuseEngine:
         "url:(location&&location.pathname)||'',ready:document.readyState,"
         "textarea:!!document.querySelector('textarea'),"
         "composer:!!document.querySelector('[data-testid=\\\"hatch-composer-placeholder-overlay\\\"]'),"
-        "signin:/log in|sign in|登录/i.test((document.body&&document.body.innerText)||'')});})()")
+        "signin:/log in|sign in|登录/i.test((document.body&&document.body.innerText)||''),"
+        "disconnected:/Muse is disconnected|We disconnected Muse|Muse 已断开/i.test((document.body&&document.body.innerText)||'')});})()")
 
     def _wait_composer(self, timeout: float = 15.0):
         """在页面 hydration / 附件重挂载期间等待可用的输入框。"""
@@ -1221,6 +1237,9 @@ class MuseEngine:
                              reason="composer_not_found", page_ready=state.get("ready"),
                              has_textarea=state.get("textarea"), has_composer=state.get("composer"),
                              redirected_to_signin=state.get("signin"))
+            if state.get("disconnected"):
+                raise MuseAccountDisconnectedError(
+                    "该账号已被 Muse 断开（Muse is disconnected），需要到官网重新连接后再导入 Cookie")
             if state.get("signin"):
                 raise MuseAuthError("页面回到了登录页，会话可能已失效，请重新导入 Cookie")
             raise MuseGenerationError("找不到聊天输入框（页面未在超时内就绪，可能仍在加载或 Muse 页面结构已变化）")

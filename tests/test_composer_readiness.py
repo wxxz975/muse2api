@@ -2,12 +2,14 @@
 import json
 import sys
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from muse2api.engine import MuseEngine, MuseAuthError, MuseGenerationError
+from muse2api.engine import (MuseAccountDisconnectedError, MuseAuthError,
+                            MuseEngine, MuseGenerationError)
 
 
 class Page:
@@ -67,6 +69,36 @@ def test_redirect_to_signin_is_an_auth_failure_not_a_generation_error():
         assert "登录页" in str(exc)
     else:
         raise AssertionError("sign-in redirect must not be retried as a generic generation failure")
+
+
+def test_disconnected_page_is_account_scoped_not_generic():
+    e = engine([], state=json.dumps({"ready": "complete", "textarea": False, "composer": False,
+                                     "signin": False, "disconnected": True}))
+    try:
+        e._send("hello")
+    except MuseAccountDisconnectedError as exc:
+        assert "Muse is disconnected" in str(exc)
+    else:
+        raise AssertionError("disconnected account must raise the account-scoped error")
+
+
+def test_disconnected_marker_aborts_hydration_wait_immediately():
+    class SlowPage:
+        def __init__(self):
+            self.calls = 0
+        def js(self, expr, **kwargs):
+            self.calls += 1
+            return "disconnected"
+    e = MuseEngine(SimpleNamespace(profile_dir=tempfile.mkdtemp()))
+    page = SlowPage()
+    started = time.monotonic()
+    try:
+        e._wait_ws_ready(page, timeout=5)
+    except MuseAccountDisconnectedError:
+        pass
+    else:
+        raise AssertionError("hydration wait must surface disconnection")
+    assert time.monotonic() - started < 1.5 and page.calls == 1
 
 
 if __name__ == "__main__":
