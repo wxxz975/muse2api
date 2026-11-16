@@ -1110,6 +1110,9 @@ function setLang(v){
 }
 /* 整句：中文 → 英文 */
 const I18N_EN = {
+  "会话有效 · 工作区已断开": "Session valid · Workspace disconnected",
+  "会话有效 · 工作区已挂起（可自动唤醒）": "Session valid · Workspace suspended (auto-wake)",
+
   "会话有效 · 工作区未确认": "Session valid · Workspace unknown",
   "会话有效 · 工作区未连接": "Session valid · Workspace disconnected",
   "周剩余额度": "Weekly quota remaining",
@@ -2770,7 +2773,9 @@ function accountCard(account){
   const status=!enabled?'已禁用'
     :account.ok===false?'● 异常'
     :account.ok!==true?'○ 未检测'
-    :vmBroken?'● '+t('会话有效 · 工作区未连接')+' (VM: '+vm+')'
+    :vmBroken?'● '+t(vm.toUpperCase()==='DISABLED'?'会话有效 · 工作区已断开'
+                              :vm.toUpperCase()==='SUSPENDED'?'会话有效 · 工作区已挂起（可自动唤醒）'
+                              :'会话有效 · 工作区未连接')+' (VM: '+vm+')'
     :vm?'● 可用'
     :'● '+t('会话有效 · 工作区未确认');
   const cls=!enabled?'mute':(account.ok===false||vmBroken)?'bad':account.ok===true?'ok':'warn';

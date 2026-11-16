@@ -1274,8 +1274,14 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
                     if refreshed:
                         cur_acc = refreshed
                     workspace = str(cur_acc.get("vm_state") or "").upper()
+                    if workspace == "SUSPENDED":
+                        # 空闲挂起是可恢复的：先强制唤醒一次，别把可用账号判死。
+                        journal.emit("workspace.wake_requested", stage="workspace",
+                                     account_id=cur_acc["id"], reason="vm_suspended")
+                        woken = _renew_and_persist(cur_acc["id"], wake_vm=True, force=True) or cur_acc
+                        cur_acc = woken
+                        workspace = str(cur_acc.get("vm_state") or "").upper()
                     if workspace and workspace != "RUNNING":
-                        # 工作区未连接时页面能打开但一发送就断开，先快速失败并换号。
                         raise MuseWorkspaceUnavailableError(
                             f"账号工作区未连接（VM: {workspace}），无法生成；请到 muse.ai 重新连接后重试")
                     engine.start()
@@ -2657,6 +2663,12 @@ def _persist_session(aid: str, result: dict, note: str, *, keepalive: bool = Tru
 def _quota_in_lease(aid: str, acc: dict) -> dict:
     """The manual button and scheduler share the existing Settings-menu JS."""
     workspace = str(acc.get("vm_state") or "").upper()
+    if workspace == "SUSPENDED":
+        # 空闲挂起可恢复：先唤醒，再读额度。
+        journal.emit("workspace.wake_requested", level="warning", account_id=aid,
+                     stage="quota", reason="vm_suspended")
+        acc = _renew_and_persist(aid, wake_vm=True, force=True) or acc
+        workspace = str(acc.get("vm_state") or "").upper()
     if workspace and workspace != "RUNNING":
         # 工作区未连接时页面只有「Muse is disconnected」，没有设置菜单可读。
         reason = f"账号工作区未连接（VM: {workspace}），无法读取额度；请先在 muse.ai 重新连接工作区"
@@ -2782,7 +2794,8 @@ async def _run_maintenance(force: bool, with_quota: bool, refresh_all: bool = Fa
                 keep_due = (settings.keepalive_enabled or not with_quota or refresh_all) and operation_due(
                     account, "keepalive", settings.keepalive_interval_minutes, now, force)
                 workspace = str(account.get("vm_state") or "").upper()
-                workspace_broken = bool(workspace) and workspace != "RUNNING"
+                # SUSPENDED 可唤醒，不阻断额度检查；只有 DISABLED 才直接跳过。
+                workspace_broken = workspace == "DISABLED"
                 quota_due = (with_quota and not workspace_broken
                              and (settings.quota_enabled or refresh_all) and operation_due(
                                  account, "quota", settings.quota_interval_minutes, now, force))

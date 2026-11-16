@@ -612,8 +612,11 @@ if (process.argv.includes('--serve')) {
     const unknown={id:'a3',label:'unknown',enabled:true,ok:true,quota:{}};
     assert.match(h.context.accountCard(ok),/● 可用/);
     assert.doesNotMatch(h.context.accountCard(broken),/● 可用/);
-    assert.match(h.context.accountCard(broken),/会话有效 · 工作区未连接/);
+    assert.match(h.context.accountCard(broken),/会话有效 · 工作区已断开/);
     assert.match(h.context.accountCard(broken),/VM: DISABLED/);
+    const suspended={id:'a4',label:'susp',enabled:true,ok:true,vm_state:'SUSPENDED',quota:{}};
+    assert.match(h.context.accountCard(suspended),/工作区已挂起（可自动唤醒）/);
+    assert.doesNotMatch(h.context.accountCard(suspended),/● 可用/);
     assert.match(h.context.accountCard(unknown),/工作区未确认/);
     assert.doesNotMatch(h.context.accountCard(unknown),/● 可用/);
   });

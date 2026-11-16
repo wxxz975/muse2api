@@ -18,6 +18,8 @@ class WorkspaceTests(unittest.TestCase):
         app.store.update_account(acc["id"], vm_state="DISABLED", ok=True)
         with patch.object(app.engine, "start") as start, \
              patch.object(app.engine, "generate") as generate, \
+             patch.object(app, "_renew_and_persist",
+                          side_effect=lambda i, **k: app.store.get_account(i)), \
              patch.object(app.engine, "close_current_page"):
             with self.assertRaises(MuseWorkspaceUnavailableError):
                 app._run_generation_locked("prompt", "image", 30, account_id=acc["id"],

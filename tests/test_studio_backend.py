@@ -131,6 +131,32 @@ class StudioBackendTests(unittest.TestCase):
             self.assertEqual(task["status"],"completed")
 
 
+
+    async def test_suspended_workspace_is_woken_before_quota_and_generation(self):
+        app.store.update_account(self.a["id"], vm_state="SUSPENDED")
+        woke = {"n": 0}
+        def renew(ident, wake_vm=True, force=False):
+            woke["n"] += 1
+            app.store.update_account(ident, vm_state="RUNNING")
+            return app.store.get_account(ident)
+        with patch.object(app, "_renew_and_persist", side_effect=renew), \
+             patch.object(app.engine, "start"), \
+             patch.object(app.engine, "quota", return_value={"found": True, "weekly_used_pct": 5}), \
+             patch.object(app.engine, "close_current_page"):
+            quota = await asyncio.to_thread(app._query_quota_sync, self.a["id"], True)
+        self.assertTrue(quota["found"])
+        self.assertGreaterEqual(woke["n"], 1)
+
+    async def test_disabled_workspace_still_fails_without_wake(self):
+        app.store.update_account(self.a["id"], vm_state="DISABLED")
+        with patch.object(app, "_renew_and_persist") as renew, \
+             patch.object(app.engine, "quota") as quota, \
+             patch.object(app.engine, "close_current_page"):
+            with self.assertRaises(app.MuseGenerationError) as raised:
+                await asyncio.to_thread(app._query_quota_sync, self.a["id"], True)
+        self.assertIn("工作区未连接", str(raised.exception))
+        renew.assert_not_called()
+        quota.assert_not_called()
     async def test_quota_is_not_read_for_disconnected_workspace(self):
         app.store.update_account(self.a["id"], vm_state="DISABLED")
         with patch.object(app.engine, "quota") as quota, \
